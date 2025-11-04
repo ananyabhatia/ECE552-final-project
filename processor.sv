@@ -7,14 +7,20 @@ module processor(clock, instruction, dataToWrite, reset);
     // ----------------FETCH-----------------
     input logic [31:0] instruction;
 
-    logic [31:0] PC, PCplus4, nextPC;
+    logic [31:0] PC, PCplus4, nextPC, tar_pred;
+    logic dir_pred;
     always_comb begin: fetch_comb
         PCplus4 = PC + 32'd4;
-        nextPC = pcSelect == 2'b00 ? PCplus4 :
-                 pcSelect == 2'b01 ? branchTarget :
-                 pcSelect == 2'b10 ? jalTarget :
-                 pcSelect == 2'b11 ? jalrTarget :
-                 PCplus4; // default to PC+4
+        if (dir_pred)
+            nextPC = tar_pred;
+        else
+            nextPC = pcSelect == 2'b00 ? PCplus4 :
+                    pcSelect == 2'b10 ? jalTarget :
+                    pcSelect == 2'b11 ? jalrTarget :
+                    PCplus4; // default to PC+4
+        if (EX_mispredict) begin
+            nextPC = EX_target;
+        end
     end
 
     always_ff @(posedge clock or posedge reset) begin: fetch_ff
@@ -23,13 +29,22 @@ module processor(clock, instruction, dataToWrite, reset);
         else
             PC <= nextPC;
     end
+    bp branch_predictor(
+        .PC(PC),
+        .direction(dir_pred),
+        .target(tar_pred),
+        .clock(clock)
+    );
 
     // ---------------------------------------
 
-    logic [31:0] FD_inst, FD_PC;
+    logic [31:0] FD_inst, FD_PC, FD_target;
+    logic FD_prediction;
     always_ff @(posedge clock) begin: FD_LATCH
         FD_PC <= PC;
         FD_inst <= instruction;
+        FD_prediction <= dir_pred;
+        FD_target <= tar_pred;
     end
 
 
@@ -84,10 +99,10 @@ module processor(clock, instruction, dataToWrite, reset);
 
     // ---------------------------------------
 
-    logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ;
+    logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ, DX_target;
     logic [3:0] DX_ALUop;
     logic [4:0] DX_rd;
-    logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui;
+    logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
     always_ff @(posedge clock) begin: DX_LATCH
         DX_PC <= FD_PC;
         DX_inst <= FD_inst;
@@ -107,13 +122,15 @@ module processor(clock, instruction, dataToWrite, reset);
         DX_isJalr <= isJalr;
         DX_isAuipc <= isAuipc;
         DX_isLui <= isLui;
+        DX_prediction <= FD_prediction;
+        DX_target <= FD_target;
     end
 
     // ----------------EXECUTE-----------------
 
     assign operandB = DX_ALUinB ? DX_imm : DX_dataB;
-    logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult;
-    logic taken;
+    logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult, EX_target;
+    logic taken, EX_mispredict;
     logic [1:0] pcSelect; // 00 is PC+4, 01 is branchTarget, 10 is jalTarget, 11 is jalrTarget
     alu ALU_unit (
         .operandA(DX_dataA),
@@ -125,16 +142,22 @@ module processor(clock, instruction, dataToWrite, reset);
     always_comb begin
         branchTarget = DX_PC + DX_immB;
         jalTarget = DX_PC + DX_immJ;
-        jalrTarget = (DX_dataA + DX_imm) & ~32'b1;
+        jalrTarget = (DX_dataA + DX_imm) & ~32'd1;
         auipcResult = DX_PC + DX_immU;
-        if (DX_isABranch && taken)
-            pcSelect = 2'b01;
-        else if (DX_isJal)
+        if (DX_isABranch && (DX_prediction != taken)) begin
+            EX_mispredict = 1'b1;
+            EX_target = taken ? branchTarget : (DX_PC + 32'd4);
+        end else begin
+            EX_mispredict = 1'b0;
+            EX_target = 32'b0;
+        end
+        if (DX_isJal)
             pcSelect = 2'b10; 
         else if (DX_isJalr)
             pcSelect = 2'b11;
         else
             pcSelect = 2'b00;
+        
     end
     // ---------------------------------------
     logic [31:0] XM_inst, XM_PC, XM_imm, XM_dataA, XM_dataB, XM_ALURESULT, XM_auipcResult, XM_immU;
@@ -161,6 +184,7 @@ module processor(clock, instruction, dataToWrite, reset);
     end
 
     // ------------------MEMORY------------------
+
     // ------------------------------------------
     logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU;
     logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui;
