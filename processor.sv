@@ -5,7 +5,7 @@ module processor(clock, instruction, dataToWrite, reset);
 
     
     // ----------------FETCH-----------------
-    input logic [31:0] instruction;
+    logic [31:0] instruction;
 
     logic [31:0] PC, PCplus4, nextPC, tar_pred;
     logic dir_pred;
@@ -35,6 +35,11 @@ module processor(clock, instruction, dataToWrite, reset);
         .target(tar_pred),
         .clock(clock)
     );
+
+    ROM #(.MEMFILE({DIR, MEM_DIR, FILE, ".mem"}))
+	InstMem(.clk(clock), 
+		.addr(PC[17:2]), 
+		.dataOut(instruction));
 
     // ---------------------------------------
 
@@ -102,6 +107,7 @@ module processor(clock, instruction, dataToWrite, reset);
     logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ, DX_target;
     logic [3:0] DX_ALUop;
     logic [4:0] DX_rd;
+    logic [2:0] func3;
     logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
     always_ff @(posedge clock) begin: DX_LATCH
         DX_PC <= FD_PC;
@@ -118,6 +124,7 @@ module processor(clock, instruction, dataToWrite, reset);
         DX_rd <= rd;
         DX_isABranch <= isABranch;
         DX_RWE <= RWE;
+        DX_func3 <= func3;
         DX_isJal <= isJal;
         DX_isJalr <= isJalr;
         DX_isAuipc <= isAuipc;
@@ -163,6 +170,7 @@ module processor(clock, instruction, dataToWrite, reset);
     logic [31:0] XM_inst, XM_PC, XM_imm, XM_dataA, XM_dataB, XM_ALURESULT, XM_auipcResult, XM_immU;
     logic XM_taken, XM_isABranch, XM_RWE, XM_isLui, XM_isJal, XM_isJalr, XM_isAuipc;
     logic [4:0] XM_rd;
+    logic [2:0] XM_func3;
 
     always_ff @(posedge clock) begin: XM_LATCH
         XM_PC <= DX_PC;
@@ -181,12 +189,24 @@ module processor(clock, instruction, dataToWrite, reset);
         XM_auipcResult <= auipcResult;
         XM_immU <= DX_immU;
         XM_isLui <= DX_isLui;
+        XM_func3 <= DX_func3;
     end
 
     // ------------------MEMORY------------------
 
+    logic isStore;
+    assign isStore = (XM_inst[6:0] == 7'b0100011) ? 1'b1 : 1'b0;
+    logic [31:0] dataOut;
+
+    RAM_wrapper ProcMem(.clk(clock), 
+		.wEn(isStore), 
+		.addr(XM_ALURESULT), 
+		.dataIn(XM_dataB), 
+        .func3(XM_func3),
+		.dataOut(dataOut));
+
     // ------------------------------------------
-    logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU;
+    logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU, MW_dmemOut;
     logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui;
     logic [4:0] MW_rd;
 
@@ -207,10 +227,13 @@ module processor(clock, instruction, dataToWrite, reset);
         MW_auipcResult <= XM_auipcResult;
         MW_immU <= XM_immU;
         MW_isLui <= XM_isLui;
+        MW_dmemOut <= dataOut;
     end
 
     // ------------------WRITEBACK----------------
     logic [4:0] WB_destination;
+    logic isLoad;
+    assign isLoad = (MW_inst[6:0] == 7'b0000011) ? 1'b1 : 1'b0;
     logic [31:0] data_writeReg;
     assign WB_destination = MW_rd;
     always_comb begin
@@ -218,7 +241,7 @@ module processor(clock, instruction, dataToWrite, reset);
                         MW_isAuipc ? MW_auipcResult : 
                         MW_isLui ? MW_immU :
                         MW_ALURESULT;
-        dataToWrite = data_writeReg;
+        dataToWrite = isLoad ? MW_dmemOut : data_writeReg;
     end
 
 endmodule
