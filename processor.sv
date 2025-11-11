@@ -1,9 +1,6 @@
 module processor(clock, reset);
     input logic clock;
     input logic reset;
-
-
-
     
     // ----------------FETCH-----------------
     logic [31:0] instruction;
@@ -76,6 +73,16 @@ module processor(clock, reset);
         imm_U = {FD_inst[31:12], 12'b0};
         imm_J = {{11{FD_inst[31]}}, FD_inst[31], FD_inst[19:12], FD_inst[20], FD_inst[30:21], 1'b0};
     end
+    logic [4:0] src1, src2, dest;
+    setsourcedest set_src_dest(
+        .opcode(opcode),
+        .src1(rs1),
+        .src2(rs2),
+        .dest(rd),
+        .out_src1(src1),
+        .out_src2(src2),
+        .out_dest(dest)
+    );
     control control_unit(
         .opcode(opcode), 
         .func3(func3), 
@@ -97,8 +104,8 @@ module processor(clock, reset);
         .ctrl_writeEnable(MW_RWE),
         .ctrl_reset(reset),
         .ctrl_writeReg(WB_destination),
-        .ctrl_readRegA(rs1),
-        .ctrl_readRegB(rs2),
+        .ctrl_readRegA(src1),
+        .ctrl_readRegB(src2),
         .data_writeReg(data_writeReg),
         .data_readRegA(data_readRegA),
         .data_readRegB(data_readRegB)
@@ -123,7 +130,9 @@ module processor(clock, reset);
         DX_dataB <= data_readRegB;
         DX_ALUop <= ALUop;
         DX_ALUinB <= ALUinB;
-        DX_rd <= rd;
+        DX_rd <= dest;
+        DX_src1 <= src1;
+        DX_src2 <= src2;
         DX_isABranch <= isABranch;
         DX_RWE <= RWE;
         DX_func3 <= func3;
@@ -185,6 +194,8 @@ module processor(clock, reset);
         XM_ALURESULT <= aluResult;
         XM_taken <= taken;
         XM_rd <= DX_rd;
+        XM_src1 <= DX_src1;
+        XM_src2 <= DX_src2;
         XM_isABranch <= DX_isABranch;
         XM_RWE <= DX_RWE;
         XM_isJal <= DX_isJal;
@@ -223,6 +234,8 @@ module processor(clock, reset);
         MW_ALURESULT <= XM_ALURESULT;
         MW_taken <= XM_taken;
         MW_rd <= XM_rd;
+        MW_src1 <= XM_src1;
+        MW_src2 <= XM_src2;
         MW_isABranch <= XM_isABranch;
         MW_RWE <= XM_RWE;
         MW_isJal <= XM_isJal;
@@ -247,5 +260,10 @@ module processor(clock, reset);
                         isLoad ? MW_dmemOut :
                         MW_ALURESULT;
     end
+
+
+    // -----------------BYPASS-----------------
+
+
 
 endmodule
