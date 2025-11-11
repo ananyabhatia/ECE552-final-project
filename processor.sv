@@ -1,7 +1,8 @@
-module processor(clock, instruction, dataToWrite, reset);
+module processor(clock, reset);
     input logic clock;
     input logic reset;
-    output logic [31:0] dataToWrite;
+
+
 
     
     // ----------------FETCH-----------------
@@ -71,9 +72,9 @@ module processor(clock, instruction, dataToWrite, reset);
         rs2 = FD_inst[24:20];
         imm_I = {{20{FD_inst[31]}}, FD_inst[31:20]};
         imm_S = {{20{FD_inst[31]}}, FD_inst[31:25], FD_inst[11:7]};
-        imm_B = {{19{FD_inst[31]}}, FD_inst[7], FD_inst[30:25], FD_inst[11:8], 1'b0};
+        imm_B = {{19{FD_inst[31]}}, FD_inst[31], FD_inst[7], FD_inst[30:25], FD_inst[11:8], 1'b0};
         imm_U = {FD_inst[31:12], 12'b0};
-        imm_J = {{11{FD_inst[31]}}, FD_inst[19:12], FD_inst[20], FD_inst[30:21], 1'b0};
+        imm_J = {{11{FD_inst[31]}}, FD_inst[31], FD_inst[19:12], FD_inst[20], FD_inst[30:21], 1'b0};
     end
     control control_unit(
         .opcode(opcode), 
@@ -86,7 +87,8 @@ module processor(clock, instruction, dataToWrite, reset);
         .isJal(isJal),
         .isJalr(isJalr),
         .isAuipc(isAuipc),
-        .isLui(isLui)
+        .isLui(isLui),
+        .isStore(isStore)
     );
 
     logic [31:0] data_readRegA, data_readRegB, operandB;
@@ -107,7 +109,7 @@ module processor(clock, instruction, dataToWrite, reset);
     logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ, DX_target;
     logic [3:0] DX_ALUop;
     logic [4:0] DX_rd;
-    logic [2:0] func3;
+    logic [2:0] DX_func3;
     logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
     always_ff @(posedge clock) begin: DX_LATCH
         DX_PC <= FD_PC;
@@ -129,13 +131,15 @@ module processor(clock, instruction, dataToWrite, reset);
         DX_isJalr <= isJalr;
         DX_isAuipc <= isAuipc;
         DX_isLui <= isLui;
+        DX_isStore <= isStore;
         DX_prediction <= FD_prediction;
         DX_target <= FD_target;
     end
 
     // ----------------EXECUTE-----------------
 
-    assign operandB = DX_ALUinB ? DX_imm : DX_dataB;
+    assign operandB = DX_ALUinB ? DX_imm : 
+                        DX_isStore ? DX_imm_S : DX_dataB;
     logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult, EX_target;
     logic taken, EX_mispredict;
     logic [1:0] pcSelect; // 00 is PC+4, 01 is branchTarget, 10 is jalTarget, 11 is jalrTarget
@@ -240,8 +244,8 @@ module processor(clock, instruction, dataToWrite, reset);
         data_writeReg = (MW_isJal | MW_isJalr) ? (MW_PC + 32'd4) :
                         MW_isAuipc ? MW_auipcResult : 
                         MW_isLui ? MW_immU :
+                        isLoad ? MW_dmemOut :
                         MW_ALURESULT;
-        dataToWrite = isLoad ? MW_dmemOut : data_writeReg;
     end
 
 endmodule
