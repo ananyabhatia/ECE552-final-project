@@ -26,14 +26,4 @@ module regfile (
         data_readRegB = (ctrl_readRegB == 0) ? 32'b0 : regs[ctrl_readRegB];
     end
 
-	`ifndef SYNTHESIS
-    // synchronous write stage already cleared regs on reset,
-    // so reload test values afterward
-    always @(negedge ctrl_reset) begin
-        regs[1] <= 32'd5;
-        regs[2] <= 32'd3;
-        $display("Registers reloaded after reset: x1=5, x2=3");
-    end
-`endif
-
 endmodule
