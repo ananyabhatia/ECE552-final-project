@@ -21,7 +21,7 @@ module processor(clock, reset);
         end
     end
 
-    always_ff @(posedge clock or posedge reset) begin: fetch_ff
+    always_ff @(negedge clock or posedge reset) begin: program_counter
         if (reset)
             PC <= 32'b0;
         else if (!load_use_hazard)
@@ -43,8 +43,8 @@ module processor(clock, reset);
 
     logic [31:0] FD_inst, FD_PC, FD_target;
     logic FD_prediction;
-    always_ff @(posedge clock) begin: FD_LATCH
-        if (EX_mispredict) begin
+    always_ff @(negedge clock or posedge reset) begin: FD_LATCH
+        if (EX_mispredict || reset) begin
             FD_PC <= 32'b0;
             FD_inst <= 32'b0;
             FD_prediction <= 1'b0;
@@ -133,8 +133,8 @@ module processor(clock, reset);
     logic [4:0] DX_src1, DX_src2;
     logic [2:0] DX_func3;
     logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction, DX_isStore, DX_isLoad;
-    always_ff @(posedge clock) begin: DX_LATCH
-        if (load_use_hazard || EX_mispredict) begin
+    always_ff @(negedge clock or posedge reset) begin: DX_LATCH
+        if (load_use_hazard || EX_mispredict || reset) begin
             DX_PC <= DX_PC;
             DX_inst <= 32'b0; // insert bubble
             DX_imm <= 32'b0;
@@ -237,30 +237,53 @@ module processor(clock, reset);
     logic [4:0] XM_rd;
     logic [2:0] XM_func3;
     logic [4:0] XM_src1, XM_src2;
-    always_ff @(posedge clock) begin: XM_LATCH
-        XM_PC <= DX_PC;
-        XM_inst <= DX_inst;
-        XM_imm <= DX_imm;
-        XM_dataA <= DX_dataA;
-        XM_dataB <= DX_dataB;
-        XM_ALURESULT <= aluResult;
-        XM_taken <= taken;
-        XM_rd <= DX_rd;
-        XM_src1 <= DX_src1;
-        XM_src2 <= DX_src2;
-        XM_isABranch <= DX_isABranch;
-        XM_RWE <= DX_RWE;
-        XM_isJal <= DX_isJal;
-        XM_isJalr <= DX_isJalr;
-        XM_isAuipc <= DX_isAuipc;
-        XM_auipcResult <= auipcResult;
-        XM_immU <= DX_immU;
-        XM_isLui <= DX_isLui;
-        XM_func3 <= DX_func3;
-        XM_isLoad <= DX_isLoad;
-        XM_isStore <= DX_isStore;
+    always_ff @(negedge clock or posedge reset) begin: XM_LATCH
+        if (reset) begin
+            XM_PC <= 32'b0;
+            XM_inst <= 32'b0;
+            XM_imm <= 32'b0;
+            XM_dataA <= 32'b0;
+            XM_dataB <= 32'b0;
+            XM_ALURESULT <= 32'b0;
+            XM_taken <= 1'b0;
+            XM_rd <= 5'b0;
+            XM_src1 <= 5'b0;
+            XM_src2 <= 5'b0;
+            XM_isABranch <= 1'b0;
+            XM_RWE <= 1'b0;
+            XM_isJal <= 1'b0;
+            XM_isJalr <= 1'b0;
+            XM_isAuipc <= 1'b0;
+            XM_auipcResult <= 32'b0;
+            XM_immU <= 32'b0;
+            XM_isLui <= 1'b0;
+            XM_func3 <= 3'b0;
+            XM_isLoad <= 1'b0;
+            XM_isStore <= 1'b0;
+        end else begin
+            XM_PC <= DX_PC;
+            XM_inst <= DX_inst;
+            XM_imm <= DX_imm;
+            XM_dataA <= DX_dataA;
+            XM_dataB <= DX_dataB;
+            XM_ALURESULT <= aluResult;
+            XM_taken <= taken;
+            XM_rd <= DX_rd;
+            XM_src1 <= DX_src1;
+            XM_src2 <= DX_src2;
+            XM_isABranch <= DX_isABranch;
+            XM_RWE <= DX_RWE;
+            XM_isJal <= DX_isJal;
+            XM_isJalr <= DX_isJalr;
+            XM_isAuipc <= DX_isAuipc;
+            XM_auipcResult <= auipcResult;
+            XM_immU <= DX_immU;
+            XM_isLui <= DX_isLui;
+            XM_func3 <= DX_func3;
+            XM_isLoad <= DX_isLoad;
+            XM_isStore <= DX_isStore;
+        end
     end
-
     // ------------------MEMORY------------------
 
     logic [31:0] dataOut;
@@ -280,28 +303,52 @@ module processor(clock, reset);
     logic [4:0] MW_rd;
     logic [4:0] MW_src1, MW_src2;
 
-    always_ff @(posedge clock) begin: MW_LATCH
-        MW_PC <= XM_PC;
-        MW_inst <= XM_inst;
-        MW_imm <= XM_imm;
-        MW_dataA <= XM_dataA;
-        MW_dataB <= XM_dataB;
-        MW_ALURESULT <= XM_ALURESULT;
-        MW_taken <= XM_taken;
-        MW_rd <= XM_rd;
-        MW_src1 <= XM_src1;
-        MW_src2 <= XM_src2;
-        MW_isABranch <= XM_isABranch;
-        MW_RWE <= XM_RWE;
-        MW_isJal <= XM_isJal;
-        MW_isJalr <= XM_isJalr;
-        MW_isAuipc <= XM_isAuipc;
-        MW_auipcResult <= XM_auipcResult;
-        MW_immU <= XM_immU;
-        MW_isLui <= XM_isLui;
-        MW_dmemOut <= dataOut;
-        MW_isLoad <= XM_isLoad;
-        MW_isStore <= XM_isStore;
+    always_ff @(negedge clock or posedge reset) begin: MW_LATCH
+        if (reset) begin
+            MW_PC <= 32'b0;
+            MW_inst <= 32'b0;
+            MW_imm <= 32'b0;
+            MW_dataA <= 32'b0;
+            MW_dataB <= 32'b0;
+            MW_ALURESULT <= 32'b0;
+            MW_taken <= 1'b0;
+            MW_rd <= 5'b0;
+            MW_src1 <= 5'b0;
+            MW_src2 <= 5'b0;
+            MW_isABranch <= 1'b0;
+            MW_RWE <= 1'b0;
+            MW_isJal <= 1'b0;
+            MW_isJalr <= 1'b0;
+            MW_isAuipc <= 1'b0;
+            MW_auipcResult <= 32'b0;
+            MW_immU <= 32'b0;
+            MW_isLui <= 1'b0;
+            MW_dmemOut <= 32'b0;
+            MW_isLoad <= 1'b0;
+            MW_isStore <= 1'b0;
+        end else begin
+            MW_PC <= XM_PC;
+            MW_inst <= XM_inst;
+            MW_imm <= XM_imm;
+            MW_dataA <= XM_dataA;
+            MW_dataB <= XM_dataB;
+            MW_ALURESULT <= XM_ALURESULT;
+            MW_taken <= XM_taken;
+            MW_rd <= XM_rd;
+            MW_src1 <= XM_src1;
+            MW_src2 <= XM_src2;
+            MW_isABranch <= XM_isABranch;
+            MW_RWE <= XM_RWE;
+            MW_isJal <= XM_isJal;
+            MW_isJalr <= XM_isJalr;
+            MW_isAuipc <= XM_isAuipc;
+            MW_auipcResult <= XM_auipcResult;
+            MW_immU <= XM_immU;
+            MW_isLui <= XM_isLui;
+            MW_dmemOut <= dataOut;
+            MW_isLoad <= XM_isLoad;
+            MW_isStore <= XM_isStore;
+        end
     end
 
     // ------------------WRITEBACK----------------

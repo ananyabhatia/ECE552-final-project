@@ -2,122 +2,99 @@
 
 module tb_processor;
 
-    // DUT connections
     logic clock;
     logic reset;
-    logic [31:0] instruction;
-    logic [31:0] dataToWrite;
 
-    // Instantiate the processor
-    processor DUT (
+    processor uut (
         .clock(clock),
-        .reset(reset),
-        .instruction(instruction),
-        .dataToWrite(dataToWrite)
+        .reset(reset)
     );
 
-    // 10 ns period clock (100 MHz)
-    always #5 clock = ~clock;
-
-    // expected value and operation name
-    logic [31:0] expected;
-    string opname;
-
-    // ------------------------------------------------------------
-    // Helper task to run a single instruction test
-    // ------------------------------------------------------------
-    task run_test(input [31:0] instr, input string name, input [31:0] exp);
-        begin
-            instruction = instr;
-            opname = name;
-            expected = exp;
-
-            @(posedge clock); #1;  // allow one cycle
-            $display("[%0t] %-5s | instr=%h | expected=%0d | actual=%0d | %s",
-                     $time, opname, instruction, expected, dataToWrite,
-                     (dataToWrite === expected) ? "PASS" : "FAIL");
-        end
-    endtask
-
-    // ------------------------------------------------------------
-    // Clock/Reset/Simulation control
-    // ------------------------------------------------------------
-    integer b;
-    reg [31:0] val1, val2;
-
+    // clock generation
     initial begin
-        $display("\n=== BEGIN PROCESSOR R-TYPE ALU TESTS ===");
-
-        // Initialize
         clock = 0;
+        forever #5 clock = ~clock;  // 100 MHz clock
+    end
+
+    // reset pulse
+    initial begin
         reset = 1;
-        instruction = 32'b0;
-        #20 reset = 0;
+        #20;           // hold reset for 20 ns
+        reset = 0;
+    end
 
-        // --------------------------------------------------------
-        // Preload registers x1 = 5, x2 = 3 using hierarchical access
-        // --------------------------------------------------------
-        #2;  // wait for elaboration
-
-        // --------------------------------------------------------
-        // R-TYPE ALU INSTRUCTIONS (opcode = 0110011)
-        // --------------------------------------------------------
-        run_test(32'b0000000_00010_00001_000_00011_0110011, "ADD", 32'd8);
-        run_test(32'b0100000_00010_00001_000_00100_0110011, "SUB", 32'd2);
-        run_test(32'b0000000_00010_00001_100_00101_0110011, "XOR", 32'd6);
-        run_test(32'b0000000_00010_00001_110_00110_0110011, "OR", 32'd7);
-        run_test(32'b0000000_00010_00001_111_00111_0110011, "AND", 32'd1);
-        run_test(32'b0000000_00010_00001_001_01000_0110011, "SLL", 32'd40);
-        run_test(32'b0000000_00010_00001_101_01001_0110011, "SRL", 32'd0);
-        run_test(32'b0100000_00010_00001_101_01010_0110011, "SRA", 32'd0);
-        run_test(32'b0000000_00010_00001_010_01011_0110011, "SLT", 32'd0);
-        run_test(32'b0000000_00010_00001_011_01100_0110011, "SLTU", 32'd0);
-
-        // --- I-TYPE IMMEDIATE INSTRUCTIONS (opcode = 0010011) ---
-
-        // ADDI x13, x1, 10 → 5 + 10 = 15
-        run_test(32'b000000001010_00001_000_01101_0010011, "ADDI", 32'd15);
-
-        // XORI x14, x1, 1 → 5 ^ 1 = 4
-        run_test(32'b000000000001_00001_100_01110_0010011, "XORI", 32'd4);
-
-        // ORI  x15, x1, 1 → 5 | 1 = 5
-        run_test(32'b000000000001_00001_110_01111_0010011, "ORI",  32'd5);
-
-        // ANDI x16, x1, 1 → 5 & 1 = 1
-        run_test(32'b000000000001_00001_111_10000_0010011, "ANDI", 32'd1);
-
-        // SLLI x17, x1, 1 → 5 << 1 = 10
-        run_test(32'b0000000_00001_00001_001_10001_0010011, "SLLI", 32'd10);
-
-        // SRLI x18, x1, 1 → 5 >> 1 = 2
-        run_test(32'b0000000_00001_00001_101_10010_0010011, "SRLI", 32'd2);
-
-        // SRAI x19, x1, 1 → 5 >>> 1 = 2
-        run_test(32'b0100000_00001_00001_101_10011_0010011, "SRAI", 32'd2);
-
-        // SLTI x20, x1, 10 → (5 < 10) ? 1 : 0 → 1
-        run_test(32'b000000001010_00001_010_10100_0010011, "SLTI", 32'd1);
-
-        // SLTIU x21, x1, 10 → (5 < 10) ? 1 : 0 → 1
-        run_test(32'b000000001010_00001_011_10101_0010011, "SLTIU", 32'd1);
-
-
-        // --------------------------------------------------------
-        // End of simulation
-        // --------------------------------------------------------
-        #10;
-        $display("=== END OF R-TYPE TESTS ===\n");
+    // simulation length
+    initial begin
+        #200;         // run ~200 cycles
         $finish;
     end
 
-    always @(posedge clock) begin
-        $display("ALU inputs: A=%h, B=%h, op=%h", DUT.ALU_unit.operandA, DUT.ALU_unit.operandB, DUT.ALUop);
-        $display("datawritereg: %h", DUT.data_writeReg);
-        $display("rd: %h", DUT.rd);
-        $display("aluout: %h", DUT.aluResult);
-        $display("signed values: A=%0d, B=%0d", DUT.ALU_unit.signedA, DUT.ALU_unit.signedB);
+    // dump waveform for GTKWave
+    initial begin
+        $dumpfile("processor.vcd");
+        $dumpvars(0, uut);
     end
 
+    // print register contents each cycle
+    always_ff @(posedge clock) begin
+        if (!reset) begin
+            $display("\nCycle %0t | PC=%h", $time/10, uut.PC);
+            $display("data write reg=%h", uut.data_writeReg);
+            $display("instruction=%h", uut.instruction);
+            // $display("load_use_hazard=%b", uut.load_use_hazard);
+            // $display("mispredict=%b", uut.EX_mispredict);
+            // $display("PC=%b", uut.PC);
+            // $display("nextpc=%b", uut.nextPC);
+            // $display("DX_isload=%b", uut.DX_isLoad);
+            // $display("DX_rd=%b", uut.DX_rd);
+            // $display("src1=%b", uut.src1);
+            // $display("src2=%b", uut.DX_src2);
+            $display("dxinst=%h", uut.DX_inst);
+            $display("operandA=%h", uut.operandA);
+            $display("operandB=%h", uut.operandB);
+            $display("aluop=%b", uut.DX_ALUop);
+            $display("ALUout=%h", uut.aluResult);
+            $display("dxaluinb=%b", uut.DX_ALUinB);
+            $display("dx_datab=%h", uut.DX_dataB);
+            $display("src1=%b", uut.src1);
+            $display("src2=%b", uut.src2);
+            $display("data read A=%h", uut.data_readRegA);
+            $display("data read B=%h", uut.data_readRegB);
+            $display("forwardB=%b", uut.forwardB);
+            $display("x0  = %h",  uut.RegisterFile.regs[0]);
+            $display("x1  = %h",  uut.RegisterFile.regs[1]);
+            $display("x2  = %h",  uut.RegisterFile.regs[2]);
+            $display("x3  = %h",  uut.RegisterFile.regs[3]);
+            $display("x4  = %h",  uut.RegisterFile.regs[4]);
+            $display("x5  = %h",  uut.RegisterFile.regs[5]);
+            $display("x6  = %h",  uut.RegisterFile.regs[6]);
+            $display("x7  = %h",  uut.RegisterFile.regs[7]);
+            $display("x8  = %h",  uut.RegisterFile.regs[8]);
+            $display("x9  = %h",  uut.RegisterFile.regs[9]);
+            $display("x10 = %h",  uut.RegisterFile.regs[10]);
+            $display("x11 = %h",  uut.RegisterFile.regs[11]);
+            // $display("x12 = %h",  uut.RegisterFile.regs[12]);
+            // $display("x13 = %h",  uut.RegisterFile.regs[13]);
+            // $display("x14 = %h",  uut.RegisterFile.regs[14]);
+            // $display("x15 = %h",  uut.RegisterFile.regs[15]);
+            // $display("x16 = %h",  uut.RegisterFile.regs[16]);
+            // $display("x17 = %h",  uut.RegisterFile.regs[17]);
+            // $display("x18 = %h",  uut.RegisterFile.regs[18]);
+            // $display("x19 = %h",  uut.RegisterFile.regs[19]);
+            // $display("x20 = %h",  uut.RegisterFile.regs[20]);
+            // $display("x21 = %h",  uut.RegisterFile.regs[21]);
+            // $display("x22 = %h",  uut.RegisterFile.regs[22]);
+            // $display("x23 = %h",  uut.RegisterFile.regs[23]);
+            // $display("x24 = %h",  uut.RegisterFile.regs[24]);
+            // $display("x25 = %h",  uut.RegisterFile.regs[25]);
+            // $display("x26 = %h",  uut.RegisterFile.regs[26]);
+            // $display("x27 = %h",  uut.RegisterFile.regs[27]);
+            // $display("x28 = %h",  uut.RegisterFile.regs[28]);
+            // $display("x29 = %h",  uut.RegisterFile.regs[29]);
+            // $display("x30 = %h",  uut.RegisterFile.regs[30]);
+            // $display("x31 = %h",  uut.RegisterFile.regs[31]);
+            $display("---------------------------------------------");
+        end
+    end
 
 endmodule
