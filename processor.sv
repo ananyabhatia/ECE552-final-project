@@ -98,7 +98,7 @@ module processor(clock, reset);
         .isStore(isStore)
     );
 
-    logic [31:0] data_readRegA, data_readRegB, operandB;
+    logic [31:0] data_readRegA, data_readRegB;
     regfile RegisterFile (
         .clock(clock),
         .ctrl_writeEnable(MW_RWE),
@@ -116,6 +116,7 @@ module processor(clock, reset);
     logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ, DX_target;
     logic [3:0] DX_ALUop;
     logic [4:0] DX_rd;
+    logic [4:0] DX_src1, DX_src2;
     logic [2:0] DX_func3;
     logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
     always_ff @(posedge clock) begin: DX_LATCH
@@ -146,14 +147,22 @@ module processor(clock, reset);
     end
 
     // ----------------EXECUTE-----------------
+    logic [31:0] operandA, operandB;
+    always_comb begin
+        operandA = (forwardA == 2'b01) ? XM_ALURESULT :
+                    (forwardA == 2'b10) ? data_writeReg :
+                    DX_dataA;
+        operandB = forwardB == 2'b01 ? XM_ALURESULT :
+                    forwardB == 2'b10 ? data_writeReg :
+                    DX_ALUinB ? DX_imm : 
+                    DX_isStore ? DX_immS : DX_dataB;
+    end
 
-    assign operandB = DX_ALUinB ? DX_imm : 
-                        DX_isStore ? DX_imm_S : DX_dataB;
     logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult, EX_target;
     logic taken, EX_mispredict;
     logic [1:0] pcSelect; // 00 is PC+4, 01 is branchTarget, 10 is jalTarget, 11 is jalrTarget
     alu ALU_unit (
-        .operandA(DX_dataA),
+        .operandA(operandA),
         .operandB(operandB),
         .ALUop(DX_ALUop),
         .result(aluResult),
@@ -184,7 +193,7 @@ module processor(clock, reset);
     logic XM_taken, XM_isABranch, XM_RWE, XM_isLui, XM_isJal, XM_isJalr, XM_isAuipc;
     logic [4:0] XM_rd;
     logic [2:0] XM_func3;
-
+    logic [4:0] XM_src1, XM_src2;
     always_ff @(posedge clock) begin: XM_LATCH
         XM_PC <= DX_PC;
         XM_inst <= DX_inst;
@@ -209,14 +218,16 @@ module processor(clock, reset);
 
     // ------------------MEMORY------------------
 
-    logic isStore;
-    assign isStore = (XM_inst[6:0] == 7'b0100011) ? 1'b1 : 1'b0;
+    logic XM_isStore;
+    assign XM_isStore = (XM_inst[6:0] == 7'b0100011) ? 1'b1 : 1'b0;
     logic [31:0] dataOut;
+    logic [31:0] dataIn;
+    assign dataIn = forwardC ? data_writeReg : XM_dataB;
 
     RAM_wrapper ProcMem(.clk(clock), 
-		.wEn(isStore), 
+		.wEn(XM_isStore), 
 		.addr(XM_ALURESULT), 
-		.dataIn(XM_dataB), 
+		.dataIn(dataIn), 
         .func3(XM_func3),
 		.dataOut(dataOut));
 
@@ -224,6 +235,7 @@ module processor(clock, reset);
     logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU, MW_dmemOut;
     logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui;
     logic [4:0] MW_rd;
+    logic [4:0] MW_src1, MW_src2;
 
     always_ff @(posedge clock) begin: MW_LATCH
         MW_PC <= XM_PC;
@@ -263,7 +275,21 @@ module processor(clock, reset);
 
 
     // -----------------BYPASS-----------------
-    
+    // 00 is regular, 01 is from M, 10 is from W
+    // forwardA is ALU operand A, forwardB is ALU operand B
+    logic [1:0] forwardA, forwardB;
+    // forward C is for store data
+    logic forwardC;
+    always_comb begin
+        forwardA = (DX_src1 != 0 && DX_src1 == XM_rd && XM_RWE) ? 2'b01 :
+                    (DX_src1 != 0 && DX_src1 == MW_rd && MW_RWE) ? 2'b10 :
+                    2'b00;
+        forwardB = (DX_src2 != 0 && DX_src2 == XM_rd && XM_RWE) ? 2'b01 :
+                    (DX_src2 != 0 && DX_src2 == MW_rd && MW_RWE) ? 2'b10 :
+                    2'b00;
+        forwardC = (XM_src2 != 0 && XM_src2 == MW_rd && MW_RWE) ? 1'b1 : 1'b0;  
+    end
+
 
 
 endmodule
