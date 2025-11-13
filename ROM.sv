@@ -8,7 +8,7 @@ module ROM #(parameter DATA_WIDTH = 32, ADDRESS_WIDTH = 16, DEPTH = 65536, MEMFI
     
     initial begin
         if(MEMFILE > 0) begin
-            $readmemb(MEMFILE, MemoryArray); // READ MEM B MEANS BINARY, CHANGE TO H IF HEX
+            $readmemh(MEMFILE, MemoryArray); // READ MEM B MEANS BINARY, CHANGE TO H IF HEX
         end
     end
     

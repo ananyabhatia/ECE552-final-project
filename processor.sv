@@ -34,7 +34,7 @@ module processor(clock, reset);
         .clock(clock)
     );
 
-    ROM #(.MEMFILE({DIR, MEM_DIR, FILE, ".mem"}))
+    ROM #(.MEMFILE("arithmetic.mem"))
 	InstMem(.clk(clock), 
 		.addr(PC[17:2]), 
 		.dataOut(instruction));
@@ -132,7 +132,7 @@ module processor(clock, reset);
     logic [4:0] DX_rd;
     logic [4:0] DX_src1, DX_src2;
     logic [2:0] DX_func3;
-    logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
+    logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction, DX_isStore, DX_isLoad;
     always_ff @(posedge clock) begin: DX_LATCH
         if (load_use_hazard || EX_mispredict) begin
             DX_PC <= DX_PC;
@@ -233,7 +233,7 @@ module processor(clock, reset);
     end
     // ---------------------------------------
     logic [31:0] XM_inst, XM_PC, XM_imm, XM_dataA, XM_dataB, XM_ALURESULT, XM_auipcResult, XM_immU;
-    logic XM_taken, XM_isABranch, XM_RWE, XM_isLui, XM_isJal, XM_isJalr, XM_isAuipc;
+    logic XM_taken, XM_isABranch, XM_RWE, XM_isLui, XM_isJal, XM_isJalr, XM_isAuipc, XM_isLoad, XM_isStore;
     logic [4:0] XM_rd;
     logic [2:0] XM_func3;
     logic [4:0] XM_src1, XM_src2;
@@ -276,7 +276,7 @@ module processor(clock, reset);
 
     // ------------------------------------------
     logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU, MW_dmemOut;
-    logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui;
+    logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui, MW_isLoad, MW_isStore;
     logic [4:0] MW_rd;
     logic [4:0] MW_src1, MW_src2;
 

@@ -17,9 +17,9 @@ module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJal
     logic load;
     logic store;
     always_comb begin
-        isload = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
+        isLoad = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isStore = !opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        ALUop = (isload | isStore) ? 4'b0000 : {func7[5], func3};
+        ALUop = (isLoad | isStore) ? 4'b0000 : {func7[5], func3};
         ALUinB = !opcode[6] & !opcode[5] & opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isABranch = opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         RWE = (!isABranch & !isStore);

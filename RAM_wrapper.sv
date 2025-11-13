@@ -1,11 +1,11 @@
 `timescale 1ns / 1ps
 module RAM_wrapper #( parameter DATA_WIDTH = 32, ADDRESS_WIDTH = 32, DEPTH = 4096) (
-    input wire                     clk,
-    input wire                     wEn,
-    input wire [ADDRESS_WIDTH-1:0] addr,
-    input wire [DATA_WIDTH-1:0]    dataIn,
-    input wire [2:0]               func3, // 000 is byte, 001 is half, 010 is word, 100 is load byte unsigned, 101 is load half unsigned 
-    output reg [DATA_WIDTH-1:0]    dataOut = 0);
+    input logic                     clk,
+    input logic                     wEn,
+    input logic [ADDRESS_WIDTH-1:0] addr,
+    input logic [DATA_WIDTH-1:0]    dataIn,
+    input logic [2:0]               func3, // 000 is byte, 001 is half, 010 is word, 100 is load byte unsigned, 101 is load half unsigned 
+    output logic [DATA_WIDTH-1:0]    dataOut = 0);
     
 
 
@@ -17,7 +17,7 @@ module RAM_wrapper #( parameter DATA_WIDTH = 32, ADDRESS_WIDTH = 32, DEPTH = 409
     
 
 
-    always_comb: ram begin
+    always_comb begin
         addra = addr[17:2];
         // which byte is it?? addr[1:0]
         case(func3)
