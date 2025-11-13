@@ -1,4 +1,4 @@
-module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJalr, isAuipc, isLui, isStore);
+module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJalr, isAuipc, isLui, isStore, isLoad);
     input logic [6:0] opcode;
     input logic [2:0] func3;
     input logic [6:0] func7;
@@ -12,13 +12,14 @@ module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJal
     output logic isAuipc;
     output logic isLui;
     output logic isStore; 
+    output logic isLoad;
 
     logic load;
     logic store;
     always_comb begin
-        load = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
+        isload = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isStore = !opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        ALUop = (load | isStore) ? 4'b0000 : {func7[5], func3};
+        ALUop = (isload | isStore) ? 4'b0000 : {func7[5], func3};
         ALUinB = !opcode[6] & !opcode[5] & opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isABranch = opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         RWE = (!isABranch & !isStore);

@@ -24,7 +24,7 @@ module processor(clock, reset);
     always_ff @(posedge clock or posedge reset) begin: fetch_ff
         if (reset)
             PC <= 32'b0;
-        else
+        else if (!load_use_hazard)
             PC <= nextPC;
     end
     bp branch_predictor(
@@ -44,10 +44,18 @@ module processor(clock, reset);
     logic [31:0] FD_inst, FD_PC, FD_target;
     logic FD_prediction;
     always_ff @(posedge clock) begin: FD_LATCH
-        FD_PC <= PC;
-        FD_inst <= instruction;
-        FD_prediction <= dir_pred;
-        FD_target <= tar_pred;
+        if (EX_mispredict) begin
+            FD_PC <= 32'b0;
+            FD_inst <= 32'b0;
+            FD_prediction <= 1'b0;
+            FD_target <= 32'b0;
+        end
+        else if (!load_use_hazard) begin
+            FD_PC <= PC;
+            FD_inst <= instruction;
+            FD_prediction <= dir_pred;
+            FD_target <= tar_pred;
+        end
     end
 
 
@@ -59,7 +67,7 @@ module processor(clock, reset);
     logic [4:0] rd, rs1, rs2;
     logic [31:0] imm_I, imm_S, imm_B, imm_U, imm_J;
     logic [3:0] ALUop;
-    logic ALUinB, isABranch, RWE, isJal, isJalr, isAuipc, isLui;
+    logic ALUinB, isABranch, RWE, isJal, isJalr, isAuipc, isLui, isStore, isLoad;
     always_comb begin
         opcode = FD_inst[6:0];
         func7 = FD_inst[31:25];
@@ -95,7 +103,8 @@ module processor(clock, reset);
         .isJalr(isJalr),
         .isAuipc(isAuipc),
         .isLui(isLui),
-        .isStore(isStore)
+        .isStore(isStore),
+        .isLoad(isLoad)
     );
 
     logic [31:0] data_readRegA, data_readRegB;
@@ -111,6 +120,11 @@ module processor(clock, reset);
         .data_readRegB(data_readRegB)
     );
 
+    logic load_use_hazard;
+    assign load_use_hazard = DX_isLoad &&
+                  ((DX_rd != 5'b0) && 
+                   ((DX_rd == src1) || (DX_rd == src2)));
+
     // ---------------------------------------
 
     logic [31:0] DX_inst, DX_PC, DX_imm, DX_dataA, DX_dataB, DX_immS, DX_immB, DX_immU, DX_immJ, DX_target;
@@ -120,30 +134,59 @@ module processor(clock, reset);
     logic [2:0] DX_func3;
     logic DX_ALUinB, DX_isABranch, DX_RWE, DX_isJal, DX_isJalr, DX_isAuipc, DX_isLui, DX_prediction;
     always_ff @(posedge clock) begin: DX_LATCH
-        DX_PC <= FD_PC;
-        DX_inst <= FD_inst;
-        DX_imm <= imm_I;
-        DX_immS <= imm_S;
-        DX_immB <= imm_B;
-        DX_immU <= imm_U;
-        DX_immJ <= imm_J;
-        DX_dataA <= data_readRegA;
-        DX_dataB <= data_readRegB;
-        DX_ALUop <= ALUop;
-        DX_ALUinB <= ALUinB;
-        DX_rd <= dest;
-        DX_src1 <= src1;
-        DX_src2 <= src2;
-        DX_isABranch <= isABranch;
-        DX_RWE <= RWE;
-        DX_func3 <= func3;
-        DX_isJal <= isJal;
-        DX_isJalr <= isJalr;
-        DX_isAuipc <= isAuipc;
-        DX_isLui <= isLui;
-        DX_isStore <= isStore;
-        DX_prediction <= FD_prediction;
-        DX_target <= FD_target;
+        if (load_use_hazard || EX_mispredict) begin
+            DX_PC <= DX_PC;
+            DX_inst <= 32'b0; // insert bubble
+            DX_imm <= 32'b0;
+            DX_immS <= 32'b0;
+            DX_immB <= 32'b0;
+            DX_immU <= 32'b0;
+            DX_immJ <= 32'b0;
+            DX_dataA <= 32'b0;
+            DX_dataB <= 32'b0;
+            DX_ALUop <= 4'b0;
+            DX_ALUinB <= 1'b0;
+            DX_func3 <= 3'b0;
+            DX_rd <= 5'b0;
+            DX_src1 <= 5'b0;
+            DX_src2 <= 5'b0;
+            DX_isABranch <= 1'b0;
+            DX_RWE <= 1'b0;
+            DX_isJal <= 1'b0;
+            DX_isJalr <= 1'b0;
+            DX_isAuipc <= 1'b0;
+            DX_isLui <= 1'b0;
+            DX_isStore <= 1'b0;
+            DX_isLoad <= 1'b0;
+            DX_prediction <= 1'b0;
+            DX_target <= 32'b0;
+        end else begin
+            DX_PC <= FD_PC;
+            DX_inst <= FD_inst;
+            DX_imm <= imm_I;
+            DX_immS <= imm_S;
+            DX_immB <= imm_B;
+            DX_immU <= imm_U;
+            DX_immJ <= imm_J;
+            DX_dataA <= data_readRegA;
+            DX_dataB <= data_readRegB;
+            DX_ALUop <= ALUop;
+            DX_ALUinB <= ALUinB;
+            DX_rd <= dest;
+            DX_src1 <= src1;
+            DX_src2 <= src2;
+            DX_isABranch <= isABranch;
+            DX_RWE <= RWE;
+            DX_func3 <= func3;
+            DX_isJal <= isJal;
+            DX_isJalr <= isJalr;
+            DX_isAuipc <= isAuipc;
+            DX_isLui <= isLui;
+            DX_isStore <= isStore;
+            DX_isLoad <= isLoad;
+            DX_prediction <= FD_prediction;
+            DX_target <= FD_target;
+        end
     end
 
     // ----------------EXECUTE-----------------
@@ -171,7 +214,7 @@ module processor(clock, reset);
     always_comb begin
         branchTarget = DX_PC + DX_immB;
         jalTarget = DX_PC + DX_immJ;
-        jalrTarget = (DX_dataA + DX_imm) & ~32'd1;
+        jalrTarget = (operandA + DX_imm) & ~32'd1;
         auipcResult = DX_PC + DX_immU;
         if (DX_isABranch && (DX_prediction != taken)) begin
             EX_mispredict = 1'b1;
@@ -214,12 +257,12 @@ module processor(clock, reset);
         XM_immU <= DX_immU;
         XM_isLui <= DX_isLui;
         XM_func3 <= DX_func3;
+        XM_isLoad <= DX_isLoad;
+        XM_isStore <= DX_isStore;
     end
 
     // ------------------MEMORY------------------
 
-    logic XM_isStore;
-    assign XM_isStore = (XM_inst[6:0] == 7'b0100011) ? 1'b1 : 1'b0;
     logic [31:0] dataOut;
     logic [31:0] dataIn;
     assign dataIn = forwardC ? data_writeReg : XM_dataB;
@@ -257,19 +300,20 @@ module processor(clock, reset);
         MW_immU <= XM_immU;
         MW_isLui <= XM_isLui;
         MW_dmemOut <= dataOut;
+        MW_isLoad <= XM_isLoad;
+        MW_isStore <= XM_isStore;
     end
 
     // ------------------WRITEBACK----------------
     logic [4:0] WB_destination;
-    logic isLoad;
-    assign isLoad = (MW_inst[6:0] == 7'b0000011) ? 1'b1 : 1'b0;
+
     logic [31:0] data_writeReg;
     assign WB_destination = MW_rd;
     always_comb begin
         data_writeReg = (MW_isJal | MW_isJalr) ? (MW_PC + 32'd4) :
                         MW_isAuipc ? MW_auipcResult : 
                         MW_isLui ? MW_immU :
-                        isLoad ? MW_dmemOut :
+                        MW_isLoad ? MW_dmemOut :
                         MW_ALURESULT;
     end
 
