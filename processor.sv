@@ -34,7 +34,7 @@ module processor(clock, reset);
         .clock(clock)
     );
 
-    ROM #(.MEMFILE("arithmetic.mem"))
+    ROM #(.MEMFILE("jal.mem"))
 	InstMem(.clk(clock), 
 		.addr(PC[17:2]), 
 		.dataOut(instruction));
@@ -195,10 +195,12 @@ module processor(clock, reset);
         operandA = (forwardA == 2'b01) ? XM_ALURESULT :
                     (forwardA == 2'b10) ? data_writeReg :
                     DX_dataA;
-        operandB = forwardB == 2'b01 ? XM_ALURESULT :
+        operandB = DX_ALUinB   ? DX_imm :
+                    DX_isStore  ? DX_immS :
+                    forwardB == 2'b01 ? XM_ALURESULT :
                     forwardB == 2'b10 ? data_writeReg :
-                    DX_ALUinB ? DX_imm : 
-                    DX_isStore ? DX_immS : DX_dataB;
+                    DX_dataB;
+
     end
 
     logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult, EX_target;
@@ -216,13 +218,20 @@ module processor(clock, reset);
         jalTarget = DX_PC + DX_immJ;
         jalrTarget = (operandA + DX_imm) & ~32'd1;
         auipcResult = DX_PC + DX_immU;
+
+        EX_mispredict = 1'b0;
+        EX_target     = 32'b0;
         if (DX_isABranch && (DX_prediction != taken)) begin
             EX_mispredict = 1'b1;
             EX_target = taken ? branchTarget : (DX_PC + 32'd4);
-        end else begin
-            EX_mispredict = 1'b0;
-            EX_target = 32'b0;
+        end else if (DX_isJal) begin
+            EX_mispredict = 1'b1;
+            EX_target = jalTarget;
+        end else if (DX_isJalr) begin
+            EX_mispredict = 1'b1;
+            EX_target = jalrTarget;
         end
+
         if (DX_isJal)
             pcSelect = 2'b10; 
         else if (DX_isJalr)

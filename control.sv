@@ -16,10 +16,12 @@ module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJal
 
     logic load;
     logic store;
+    logic useFunc7;
     always_comb begin
+        useFunc7 = opcode == 7'b0110011 || (opcode == 7'b0010011 && (func3 == 3'b101 || func3 == 3'b001));
         isLoad = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isStore = !opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        ALUop = (isLoad | isStore) ? 4'b0000 : {func7[5], func3};
+        ALUop = (isLoad | isStore) ? 4'b0000 : {useFunc7 ? func7[5] : 1'b0, func3};
         ALUinB = !opcode[6] & !opcode[5] & opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         isABranch = opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
         RWE = (!isABranch & !isStore);

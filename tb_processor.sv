@@ -25,7 +25,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #200;         // run ~200 cycles
+        #1000;         // run ~200 cycles
         $finish;
     end
 
@@ -41,7 +41,15 @@ module tb_processor;
             $display("\nCycle %0t | PC=%h", $time/10, uut.PC);
             $display("data write reg=%h", uut.data_writeReg);
             $display("instruction=%h", uut.instruction);
-            // $display("load_use_hazard=%b", uut.load_use_hazard);
+            $display("MW_inst=%h", uut.MW_inst);
+            $display("load_use_hazard=%b", uut.load_use_hazard);
+            $display("dataout=%h", uut.dataOut);
+            $display("XMinst=%h", uut.XM_inst);
+            $display("XM_isStore=%b", uut.XM_isStore);
+            $display("XM_isLoad=%b", uut.XM_isLoad);
+            $display("XM_ALUResult=%h", uut.XM_ALURESULT);
+            $display("datain=%h", uut.dataIn);
+            $display("XM func3=%b", uut.XM_func3);
             // $display("mispredict=%b", uut.EX_mispredict);
             // $display("PC=%b", uut.PC);
             // $display("nextpc=%b", uut.nextPC);
@@ -49,18 +57,20 @@ module tb_processor;
             // $display("DX_rd=%b", uut.DX_rd);
             // $display("src1=%b", uut.src1);
             // $display("src2=%b", uut.DX_src2);
-            $display("dxinst=%h", uut.DX_inst);
+            // $display("dxinst=%h", uut.DX_inst);
             $display("operandA=%h", uut.operandA);
             $display("operandB=%h", uut.operandB);
             $display("aluop=%b", uut.DX_ALUop);
             $display("ALUout=%h", uut.aluResult);
-            $display("dxaluinb=%b", uut.DX_ALUinB);
-            $display("dx_datab=%h", uut.DX_dataB);
-            $display("src1=%b", uut.src1);
-            $display("src2=%b", uut.src2);
-            $display("data read A=%h", uut.data_readRegA);
-            $display("data read B=%h", uut.data_readRegB);
-            $display("forwardB=%b", uut.forwardB);
+            $display("dx isStore=%b", uut.DX_isStore);
+            $display("DX_immS=%h", uut.DX_immS);
+            // $display("dxaluinb=%b", uut.DX_ALUinB);
+            // $display("dx_datab=%h", uut.DX_dataB);
+            // $display("src1=%b", uut.src1);
+            // $display("src2=%b", uut.src2);
+            // $display("data read A=%h", uut.data_readRegA);
+            // $display("data read B=%h", uut.data_readRegB);
+            // $display("forwardB=%b", uut.forwardB);
             $display("x0  = %h",  uut.RegisterFile.regs[0]);
             $display("x1  = %h",  uut.RegisterFile.regs[1]);
             $display("x2  = %h",  uut.RegisterFile.regs[2]);
