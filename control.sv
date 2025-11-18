@@ -1,34 +1,64 @@
-module control(opcode, func3, func7, ALUop, ALUinB, isABranch, RWE, isJal, isJalr, isAuipc, isLui, isStore, isLoad);
-    input logic [6:0] opcode;
-    input logic [2:0] func3;
-    input logic [6:0] func7;
+module control(
+    input logic [6:0] A_opcode,
+    input logic [2:0] A_func3,
+    input logic [6:0] A_func7,
+    output logic [3:0] A_ALUop,
+    output logic A_ALUinB,
+    output logic A_isABranch,
+    output logic A_RWE,
+    output logic A_isJal,
+    output logic A_isJalr,
+    output logic A_isAuipc,
+    output logic A_isLui,
+    output logic A_isStore,
+    output logic A_isLoad,
+    input logic [6:0] B_opcode,
+    input logic [2:0] B_func3,
+    input logic [6:0] B_func7,
+    output logic [3:0] B_ALUop,
+    output logic B_ALUinB,
+    output logic B_isABranch,
+    output logic B_RWE,
+    output logic B_isJal,
+    output logic B_isJalr,
+    output logic B_isAuipc,
+    output logic B_isLui,
+    output logic B_isStore,
+    output logic B_isLoad
+);
 
-    output logic [3:0] ALUop;
-    output logic ALUinB;
-    output logic isABranch;
-    output logic RWE;
-    output logic isJal;
-    output logic isJalr;
-    output logic isAuipc;
-    output logic isLui;
-    output logic isStore; 
-    output logic isLoad;
+    logic A_load;
+    logic A_store;
+    logic A_useFunc7;
 
-    logic load;
-    logic store;
-    logic useFunc7;
+    logic B_load;
+    logic B_store;
+    logic B_useFunc7;
+
     always_comb begin
-        useFunc7 = opcode == 7'b0110011 || (opcode == 7'b0010011 && (func3 == 3'b101 || func3 == 3'b001));
-        isLoad = !opcode[6] & !opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        isStore = !opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        ALUop = (isLoad | isStore) ? 4'b0000 : {useFunc7 ? func7[5] : 1'b0, func3};
-        ALUinB = !opcode[6] & !opcode[5] & opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        isABranch = opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & !opcode[2] & opcode[1] & opcode[0];
-        RWE = (!isABranch & !isStore);
-        isJal = opcode[6] & opcode[5] & !opcode[4] & opcode[3] & opcode[2] & opcode[1] & opcode[0];
-        isJalr = opcode[6] & opcode[5] & !opcode[4] & !opcode[3] & opcode[2] & opcode[1] & opcode[0];
-        isAuipc = !opcode[6] & !opcode[5] & opcode[4] & !opcode[3] & opcode[2] & opcode[1] & opcode[0];
-        isLui = !opcode[6] & opcode[5] & opcode[4] & !opcode[3] & opcode[2] & opcode[1] & opcode[0];
+        A_useFunc7 = A_opcode == 7'b0110011 || (A_opcode == 7'b0010011 && (A_func3 == 3'b101 || A_func3 == 3'b001));
+        A_isLoad = !A_opcode[6] & !A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_isStore = !A_opcode[6] & A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_ALUop = (A_isLoad | A_isStore) ? 4'b0000 : {A_useFunc7 ? A_func7[5] : 1'b0, A_func3};
+        A_ALUinB = !A_opcode[6] & !A_opcode[5] & A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_isABranch = A_opcode[6] & A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_RWE = (!A_isABranch & !A_isStore);
+        A_isJal = A_opcode[6] & A_opcode[5] & !A_opcode[4] & A_opcode[3] & A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_isJalr = A_opcode[6] & A_opcode[5] & !A_opcode[4] & !A_opcode[3] & A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_isAuipc = !A_opcode[6] & !A_opcode[5] & A_opcode[4] & !A_opcode[3] & A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_isLui = !A_opcode[6] & A_opcode[5] & A_opcode[4] & !A_opcode[3] & A_opcode[2] & A_opcode[1] & A_opcode[0];
+
+        B_useFunc7 = B_opcode == 7'b0110011 || (B_opcode == 7'b0010011 && (B_func3 == 3'b101 || B_func3 == 3'b001));
+        B_isLoad = !B_opcode[6] & !B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_isStore = !B_opcode[6] & B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_ALUop = (B_isLoad | B_isStore) ? 4'b0000 : {B_useFunc7 ? B_func7[5] : 1'b0, B_func3};
+        B_ALUinB = !B_opcode[6] & !B_opcode[5] & B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_isABranch = B_opcode[6] & B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_RWE = (!B_isABranch & !B_isStore);
+        B_isJal = B_opcode[6] & B_opcode[5] & !B_opcode[4] & B_opcode[3] & B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_isJalr = B_opcode[6] & B_opcode[5] & !B_opcode[4] & !B_opcode[3] & B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_isAuipc = !B_opcode[6] & !B_opcode[5] & B_opcode[4] & !B_opcode[3] & B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_isLui = !B_opcode[6] & B_opcode[5] & B_opcode[4] & !B_opcode[3] & B_opcode[2] & B_opcode[1] & B_opcode[0];
     end
     
 endmodule
