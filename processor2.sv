@@ -12,6 +12,7 @@ module processor(clock, reset);
     logic dir_pred;
     logic [6:0] opcodeA, opcodeB;
     logic isCtrlA, isCtrlB;
+    logic isMemA, isMemB;
 
 
     always_comb begin: fetch_comb
@@ -30,9 +31,12 @@ module processor(clock, reset);
         isCtrlB = (opcodeB == 7'b1100011) || // branch
                  (opcodeB == 7'b1101111) || // jal
                  (opcodeB == 7'b1100111) || // jalr
-                 (opcodeB == 7'b0010111); // auipc   
+                 (opcodeB == 7'b0010111); // auipc
+
+        isMemA  = (opcodeA == 7'b0000011) || (opcodeA == 7'b0100011); // load or store
+        isMemB  = (opcodeB == 7'b0000011) || (opcodeB == 7'b0100011); // load or store
         
-        if (isCtrlA)
+        if (isCtrlA || isMemA)
             nextPC = PCplus4;
         if (dir_pred)
             nextPC = tar_pred;
@@ -79,9 +83,9 @@ module processor(clock, reset);
             A_FD_PC <= PC;
             B_FD_PC <= PCplus4;
 
-            if (isCtrlA) begin
+            if (isCtrlA || isMemA) begin
                 A_FD_inst <= NOP;            // kill A (can’t go before control)
-                B_FD_inst <= A_instruction;  // place the control in slot B
+                B_FD_inst <= A_instruction;  // place the control or mem in slot B
             end else begin
                 A_FD_inst <= A_instruction;  // normal dual issue
                 B_FD_inst <= B_instruction;
@@ -505,66 +509,116 @@ module processor(clock, reset);
 
     logic [31:0] dataOut;
     logic [31:0] dataIn;
-    assign dataIn = forwardC ? data_writeReg : XM_dataB;
+    // TODO forwarding for superscalar
+    assign dataIn = forwardC ? data_writeReg : B_XM_dataB;
 
     RAM_wrapper ProcMem(.clk(clock), 
-		.wEn(XM_isStore), 
-		.addr(XM_ALURESULT), 
+		.wEn(B_XM_isStore), 
+		.addr(B_XM_ALURESULT), 
 		.dataIn(dataIn), 
-        .func3(XM_func3),
+        .func3(B_XM_func3),
 		.dataOut(dataOut));
 
     // ------------------------------------------
-    logic [31:0] MW_inst, MW_PC, MW_imm, MW_dataA, MW_dataB, MW_ALURESULT, MW_auipcResult, MW_immU, MW_dmemOut;
-    logic MW_taken, MW_isABranch, MW_RWE, MW_isJal, MW_isJalr, MW_isAuipc, MW_isLui, MW_isLoad, MW_isStore;
-    logic [4:0] MW_rd;
-    logic [4:0] MW_src1, MW_src2;
+    logic [31:0] A_MW_inst, A_MW_PC, A_MW_imm, A_MW_dataA, A_MW_dataB, A_MW_ALURESULT, A_MW_auipcResult, A_MW_immU, A_MW_dmemOut;
+    logic A_MW_taken, A_MW_isABranch, A_MW_RWE, A_MW_isJal, A_MW_isJalr, A_MW_isAuipc, A_MW_isLui, A_MW_isLoad, A_MW_isStore;
+    logic [4:0] A_MW_rd;
+    logic [4:0] A_MW_src1, A_MW_src2;
+
+    logic [31:0] B_MW_inst, B_MW_PC, B_MW_imm, B_MW_dataA, B_MW_dataB, B_MW_ALURESULT, B_MW_auipcResult, B_MW_immU, B_MW_dmemOut;
+    logic B_MW_taken, B_MW_isABranch, B_MW_RWE, B_MW_isJal, B_MW_isJalr, B_MW_isAuipc, B_MW_isLui, B_MW_isLoad, B_MW_isStore;
+    logic [4:0] B_MW_rd;
+    logic [4:0] B_MW_src1, B_MW_src2;
 
     always_ff @(negedge clock or posedge reset) begin: MW_LATCH
         if (reset) begin
-            MW_PC <= 32'b0;
-            MW_inst <= 32'b0;
-            MW_imm <= 32'b0;
-            MW_dataA <= 32'b0;
-            MW_dataB <= 32'b0;
-            MW_ALURESULT <= 32'b0;
-            MW_taken <= 1'b0;
-            MW_rd <= 5'b0;
-            MW_src1 <= 5'b0;
-            MW_src2 <= 5'b0;
-            MW_isABranch <= 1'b0;
-            MW_RWE <= 1'b0;
-            MW_isJal <= 1'b0;
-            MW_isJalr <= 1'b0;
-            MW_isAuipc <= 1'b0;
-            MW_auipcResult <= 32'b0;
-            MW_immU <= 32'b0;
-            MW_isLui <= 1'b0;
-            MW_dmemOut <= 32'b0;
-            MW_isLoad <= 1'b0;
-            MW_isStore <= 1'b0;
+            A_MW_PC <= 32'b0;
+            A_MW_inst <= 32'b0;
+            A_MW_imm <= 32'b0;
+            A_MW_dataA <= 32'b0;
+            A_MW_dataB <= 32'b0;
+            A_MW_ALURESULT <= 32'b0;
+            A_MW_taken <= 1'b0;
+            A_MW_rd <= 5'b0;
+            A_MW_src1 <= 5'b0;
+            A_MW_src2 <= 5'b0;
+            A_MW_isABranch <= 1'b0;
+            A_MW_RWE <= 1'b0;
+            A_MW_isJal <= 1'b0;
+            A_MW_isJalr <= 1'b0;
+            A_MW_isAuipc <= 1'b0;
+            A_MW_auipcResult <= 32'b0;
+            A_MW_immU <= 32'b0;
+            A_MW_isLui <= 1'b0;
+            A_MW_dmemOut <= 32'b0;
+            A_MW_isLoad <= 1'b0;
+            A_MW_isStore <= 1'b0;
+
+            B_MW_PC <= 32'b0;
+            B_MW_inst <= 32'b0;
+            B_MW_imm <= 32'b0;
+            B_MW_dataA <= 32'b0;
+            B_MW_dataB <= 32'b0;
+            B_MW_ALURESULT <= 32'b0;
+            B_MW_taken <= 1'b0;
+            B_MW_rd <= 5'b0;
+            B_MW_src1 <= 5'b0;
+            B_MW_src2 <= 5'b0;
+            B_MW_isABranch <= 1'b0;
+            B_MW_RWE <= 1'b0;
+            B_MW_isJal <= 1'b0;
+            B_MW_isJalr <= 1'b0;
+            B_MW_isAuipc <= 1'b0;
+            B_MW_auipcResult <= 32'b0;
+            B_MW_immU <= 32'b0;
+            B_MW_isLui <= 1'b0;
+            B_MW_dmemOut <= 32'b0;
+            B_MW_isLoad <= 1'b0;
+            B_MW_isStore <= 1'b0;
         end else begin
-            MW_PC <= XM_PC;
-            MW_inst <= XM_inst;
-            MW_imm <= XM_imm;
-            MW_dataA <= XM_dataA;
-            MW_dataB <= XM_dataB;
-            MW_ALURESULT <= XM_ALURESULT;
-            MW_taken <= XM_taken;
-            MW_rd <= XM_rd;
-            MW_src1 <= XM_src1;
-            MW_src2 <= XM_src2;
-            MW_isABranch <= XM_isABranch;
-            MW_RWE <= XM_RWE;
-            MW_isJal <= XM_isJal;
-            MW_isJalr <= XM_isJalr;
-            MW_isAuipc <= XM_isAuipc;
-            MW_auipcResult <= XM_auipcResult;
-            MW_immU <= XM_immU;
-            MW_isLui <= XM_isLui;
-            MW_dmemOut <= dataOut;
-            MW_isLoad <= XM_isLoad;
-            MW_isStore <= XM_isStore;
+            A_MW_PC <= A_XM_PC;
+            A_MW_inst <= A_XM_inst;
+            A_MW_imm <= A_XM_imm;
+            A_MW_dataA <= A_XM_dataA;
+            A_MW_dataB <= A_XM_dataB;
+            A_MW_ALURESULT <= A_XM_ALURESULT;
+            A_MW_taken <= A_XM_taken;
+            A_MW_rd <= A_XM_rd;
+            A_MW_src1 <= A_XM_src1;
+            A_MW_src2 <= A_XM_src2;
+            A_MW_isABranch <= A_XM_isABranch;
+            A_MW_RWE <= A_XM_RWE;
+            A_MW_isJal <= A_XM_isJal;
+            A_MW_isJalr <= A_XM_isJalr;
+            A_MW_isAuipc <= A_XM_isAuipc;
+            A_MW_auipcResult <= A_XM_auipcResult;
+            A_MW_immU <= A_XM_immU;
+            A_MW_isLui <= A_XM_isLui;
+            A_MW_dmemOut <= 32'b0;
+            A_MW_isLoad <= A_XM_isLoad;
+            A_MW_isStore <= A_XM_isStore;
+
+            B_MW_PC <= B_XM_PC;
+            B_MW_inst <= B_XM_inst;
+            B_MW_imm <= B_XM_imm;
+            B_MW_dataA <= B_XM_dataA;
+            B_MW_dataB <= B_XM_dataB;
+            B_MW_ALURESULT <= B_XM_ALURESULT;
+            B_MW_taken <= B_XM_taken;
+            B_MW_rd <= B_XM_rd;
+            B_MW_src1 <= B_XM_src1;
+            B_MW_src2 <= B_XM_src2;
+            B_MW_isABranch <= B_XM_isABranch;
+            B_MW_RWE <= B_XM_RWE;
+            B_MW_isJal <= B_XM_isJal;
+            B_MW_isJalr <= B_XM_isJalr;
+            B_MW_isAuipc <= B_XM_isAuipc;
+            B_MW_auipcResult <= B_XM_auipcResult;
+            B_MW_immU <= B_XM_immU;
+            B_MW_isLui <= B_XM_isLui;
+            B_MW_dmemOut <= dataOut;
+            B_MW_isLoad <= B_XM_isLoad;
+            B_MW_isStore <= B_XM_isStore;
         end
     end
 
@@ -572,13 +626,19 @@ module processor(clock, reset);
     logic [4:0] A_WB_destination, B_WB_destination;
 
     logic [31:0] A_data_writeReg, B_data_writeReg;
-    assign WB_destination = MW_rd;
+    assign A_WB_destination = A_MW_rd;
+    assign B_WB_destination = B_MW_rd;
     always_comb begin
-        data_writeReg = (MW_isJal | MW_isJalr) ? (MW_PC + 32'd4) :
-                        MW_isAuipc ? MW_auipcResult : 
-                        MW_isLui ? MW_immU :
-                        MW_isLoad ? MW_dmemOut :
-                        MW_ALURESULT;
+        A_data_writeReg = (A_MW_isJal | A_MW_isJalr) ? (A_MW_PC + 32'd4) :
+                        A_MW_isAuipc ? A_MW_auipcResult : 
+                        A_MW_isLui ? A_MW_immU :
+                        A_MW_isLoad ? A_MW_dmemOut :
+                        A_MW_ALURESULT;
+        B_data_writeReg = (B_MW_isJal | B_MW_isJalr) ? (B_MW_PC + 32'd4) :
+                        B_MW_isAuipc ? B_MW_auipcResult :  
+                        B_MW_isLui ? B_MW_immU :
+                        B_MW_isLoad ? B_MW_dmemOut :
+                        B_MW_ALURESULT;
     end
 
 
