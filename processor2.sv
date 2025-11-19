@@ -10,8 +10,8 @@ module processor(clock, reset);
 
     logic [31:0] PC, PCplus4, PCplus8, nextPC, tar_pred;
     logic dir_pred;
-    logic [6:0] opcodeA;
-    logic isCtrlA;
+    logic [6:0] opcodeA, opcodeB;
+    logic isCtrlA, isCtrlB;
 
 
     always_comb begin: fetch_comb
@@ -19,11 +19,18 @@ module processor(clock, reset);
         PCplus8 = PC + 32'd8;
         nextPC = PCplus8;
         opcodeA = A_instruction[6:0];
+        opcodeB = B_instruction[6:0];
         isCtrlA = 1'b0;
+        isCtrlB = 1'b0;
 
         isCtrlA = (opcodeA == 7'b1100011) || // branch
                  (opcodeA == 7'b1101111) || // jal
-                 (opcodeA == 7'b1100111);   // jalr
+                 (opcodeA == 7'b1100111) || // jalr
+                 (opcodeA == 7'b0010111); // auipc   
+        isCtrlB = (opcodeB == 7'b1100011) || // branch
+                 (opcodeB == 7'b1101111) || // jal
+                 (opcodeB == 7'b1100111) || // jalr
+                 (opcodeB == 7'b0010111); // auipc   
         
         if (isCtrlA)
             nextPC = PCplus4;
@@ -70,9 +77,15 @@ module processor(clock, reset);
         end
         else if (!load_use_hazard) begin
             A_FD_PC <= PC;
-            A_FD_inst <= A_instruction;
             B_FD_PC <= PCplus4;
-            B_FD_inst <= isCtrlA ? NOP : B_instruction;
+
+            if (isCtrlA) begin
+                A_FD_inst <= NOP;            // kill A (can’t go before control)
+                B_FD_inst <= A_instruction;  // place the control in slot B
+            end else begin
+                A_FD_inst <= A_instruction;  // normal dual issue
+                B_FD_inst <= B_instruction;
+            end
             FD_prediction <= dir_pred;
             FD_target <= tar_pred;
         end
@@ -316,12 +329,23 @@ module processor(clock, reset);
     end
 
     // ----------------EXECUTE-----------------
-    logic [31:0] operandA, operandB;
+    logic [31:0] A_operand1, A_operand2;
+    logic [31:0] B_operand1, B_operand2;
+
+    // TODO: add forwarding logic
     always_comb begin
-        operandA = (forwardA == 2'b01) ? XM_ALURESULT :
+        A_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
                     (forwardA == 2'b10) ? data_writeReg :
                     DX_dataA;
-        operandB = DX_ALUinB   ? DX_imm :
+        A_operand2 = DX_ALUinB   ? DX_imm :
+                    DX_isStore  ? DX_immS :
+                    forwardB == 2'b01 ? XM_ALURESULT :
+                    forwardB == 2'b10 ? data_writeReg :
+                    DX_dataB;
+        B_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
+                    (forwardA == 2'b10) ? data_writeReg :
+                    DX_dataA;
+        B_operand2 = DX_ALUinB   ? DX_imm :
                     DX_isStore  ? DX_immS :
                     forwardB == 2'b01 ? XM_ALURESULT :
                     forwardB == 2'b10 ? data_writeReg :
@@ -329,94 +353,152 @@ module processor(clock, reset);
 
     end
 
-    logic [31:0] aluResult, branchTarget, jalTarget, jalrTarget, auipcResult, EX_target;
+    logic [31:0] A_aluResult, A_branchTarget, A_jalTarget, A_jalrTarget, A_auipcResult, A_EX_target;
+    logic [31:0] B_aluResult, B_branchTarget, B_jalTarget, B_jalrTarget, B_auipcResult, B_EX_target;
     logic taken, EX_mispredict;
     logic [1:0] pcSelect; // 00 is PC+4, 01 is branchTarget, 10 is jalTarget, 11 is jalrTarget
-    alu ALU_unit (
-        .operandA(operandA),
-        .operandB(operandB),
-        .ALUop(DX_ALUop),
-        .result(aluResult),
+    alu ALU_unit_A (
+        .operandA(A_operand1),
+        .operandB(A_operand2),
+        .ALUop(A_DX_ALUop),
+        .result(A_aluResult),
         .branch(taken)
     );
+    logic trash;
+    alu ALU_unit_B (
+        .operandA(B_operand1),
+        .operandB(B_operand2),
+        .ALUop(B_DX_ALUop),
+        .result(B_aluResult),
+        .branch(trash)
+    );
     always_comb begin
-        branchTarget = DX_PC + DX_immB;
-        jalTarget = DX_PC + DX_immJ;
-        jalrTarget = (operandA + DX_imm) & ~32'd1;
-        auipcResult = DX_PC + DX_immU;
+        branchTarget = B_DX_PC + B_DX_immB;
+        jalTarget = B_DX_PC + B_DX_immJ;
+        jalrTarget = (B_operand1 + B_DX_imm) & ~32'd1;
+        auipcResult = B_DX_PC + B_DX_immU;
 
         EX_mispredict = 1'b0;
         EX_target     = 32'b0;
-        if (DX_isABranch && (DX_prediction != taken)) begin
+        if (B_DX_isABranch && (B_DX_prediction != taken)) begin
             EX_mispredict = 1'b1;
-            EX_target = taken ? branchTarget : (DX_PC + 32'd4);
-        end else if (DX_isJal) begin
+            EX_target = taken ? branchTarget : (B_DX_PC + 32'd4);
+        end else if (B_DX_isJal) begin
             EX_mispredict = 1'b1;
             EX_target = jalTarget;
-        end else if (DX_isJalr) begin
+        end else if (B_DX_isJalr) begin
             EX_mispredict = 1'b1;
             EX_target = jalrTarget;
         end
 
-        if (DX_isJal)
+        if (B_DX_isJal)
             pcSelect = 2'b10; 
-        else if (DX_isJalr)
+        else if (B_DX_isJalr)
             pcSelect = 2'b11;
         else
             pcSelect = 2'b00;
-        
     end
     // ---------------------------------------
-    logic [31:0] XM_inst, XM_PC, XM_imm, XM_dataA, XM_dataB, XM_ALURESULT, XM_auipcResult, XM_immU;
-    logic XM_taken, XM_isABranch, XM_RWE, XM_isLui, XM_isJal, XM_isJalr, XM_isAuipc, XM_isLoad, XM_isStore;
-    logic [4:0] XM_rd;
-    logic [2:0] XM_func3;
-    logic [4:0] XM_src1, XM_src2;
+    logic [31:0] A_XM_inst, A_XM_PC, A_XM_imm, A_XM_dataA, A_XM_dataB, A_XM_ALURESULT, A_XM_auipcResult, A_XM_immU;
+    logic A_XM_taken, A_XM_isABranch, A_XM_RWE, A_XM_isLui, A_XM_isJal, A_XM_isJalr, A_XM_isAuipc, A_XM_isLoad, A_XM_isStore;
+    logic [4:0] A_XM_rd;
+    logic [2:0] A_XM_func3;
+    logic [4:0] A_XM_src1, A_XM_src2;
+
+    logic [31:0] B_XM_inst, B_XM_PC, B_XM_imm, B_XM_dataA, B_XM_dataB, B_XM_ALURESULT, B_XM_auipcResult, B_XM_immU;
+    logic B_XM_taken, B_XM_isABranch, B_XM_RWE, B_XM_isLui, B_XM_isJal, B_XM_isJalr, B_XM_isAuipc, B_XM_isLoad, B_XM_isStore;
+    logic [4:0] B_XM_rd;
+    logic [2:0] B_XM_func3;
+    logic [4:0] B_XM_src1, B_XM_src2;
     always_ff @(negedge clock or posedge reset) begin: XM_LATCH
         if (reset) begin
-            XM_PC <= 32'b0;
-            XM_inst <= 32'b0;
-            XM_imm <= 32'b0;
-            XM_dataA <= 32'b0;
-            XM_dataB <= 32'b0;
-            XM_ALURESULT <= 32'b0;
-            XM_taken <= 1'b0;
-            XM_rd <= 5'b0;
-            XM_src1 <= 5'b0;
-            XM_src2 <= 5'b0;
-            XM_isABranch <= 1'b0;
-            XM_RWE <= 1'b0;
-            XM_isJal <= 1'b0;
-            XM_isJalr <= 1'b0;
-            XM_isAuipc <= 1'b0;
-            XM_auipcResult <= 32'b0;
-            XM_immU <= 32'b0;
-            XM_isLui <= 1'b0;
-            XM_func3 <= 3'b0;
-            XM_isLoad <= 1'b0;
-            XM_isStore <= 1'b0;
+            A_XM_PC <= 32'b0;
+            A_XM_inst <= 32'b0;
+            A_XM_imm <= 32'b0;
+            A_XM_dataA <= 32'b0;
+            A_XM_dataB <= 32'b0;
+            A_XM_ALURESULT <= 32'b0;
+            A_XM_taken <= 1'b0;
+            A_XM_rd <= 5'b0;
+            A_XM_src1 <= 5'b0;
+            A_XM_src2 <= 5'b0;
+            A_XM_isABranch <= 1'b0;
+            A_XM_RWE <= 1'b0;
+            A_XM_isJal <= 1'b0;
+            A_XM_isJalr <= 1'b0;
+            A_XM_isAuipc <= 1'b0;
+            A_XM_auipcResult <= 32'b0;
+            A_XM_immU <= 32'b0;
+            A_XM_isLui <= 1'b0;
+            A_XM_func3 <= 3'b0;
+            A_XM_isLoad <= 1'b0;
+            A_XM_isStore <= 1'b0;
+
+            B_XM_PC <= 32'b0;
+            B_XM_inst <= 32'b0;
+            B_XM_imm <= 32'b0;
+            B_XM_dataA <= 32'b0;
+            B_XM_dataB <= 32'b0;
+            B_XM_ALURESULT <= 32'b0;
+            B_XM_taken <= 1'b0;
+            B_XM_rd <= 5'b0;
+            B_XM_src1 <= 5'b0;
+            B_XM_src2 <= 5'b0;
+            B_XM_isABranch <= 1'b0;
+            B_XM_RWE <= 1'b0;
+            B_XM_isJal <= 1'b0;
+            B_XM_isJalr <= 1'b0;
+            B_XM_isAuipc <= 1'b0;
+            B_XM_auipcResult <= 32'b0;
+            B_XM_immU <= 32'b0;
+            B_XM_isLui <= 1'b0;
+            B_XM_func3 <= 3'b0;
+            B_XM_isLoad <= 1'b0;
+            B_XM_isStore <= 1'b0;
         end else begin
-            XM_PC <= DX_PC;
-            XM_inst <= DX_inst;
-            XM_imm <= DX_imm;
-            XM_dataA <= DX_dataA;
-            XM_dataB <= DX_dataB;
-            XM_ALURESULT <= aluResult;
-            XM_taken <= taken;
-            XM_rd <= DX_rd;
-            XM_src1 <= DX_src1;
-            XM_src2 <= DX_src2;
-            XM_isABranch <= DX_isABranch;
-            XM_RWE <= DX_RWE;
-            XM_isJal <= DX_isJal;
-            XM_isJalr <= DX_isJalr;
-            XM_isAuipc <= DX_isAuipc;
-            XM_auipcResult <= auipcResult;
-            XM_immU <= DX_immU;
-            XM_isLui <= DX_isLui;
-            XM_func3 <= DX_func3;
-            XM_isLoad <= DX_isLoad;
-            XM_isStore <= DX_isStore;
+            A_XM_PC <= A_DX_PC;
+            A_XM_inst <= A_DX_inst;
+            A_XM_imm <= A_DX_imm;
+            A_XM_dataA <= A_DX_dataA;
+            A_XM_dataB <= A_DX_dataB;
+            A_XM_ALURESULT <= A_aluResult;
+            A_XM_taken <= taken;
+            A_XM_rd <= A_DX_rd;
+            A_XM_src1 <= A_DX_src1;
+            A_XM_src2 <= A_DX_src2;
+            A_XM_isABranch <= A_DX_isABranch;
+            A_XM_RWE <= A_DX_RWE;
+            A_XM_isJal <= A_DX_isJal;
+            A_XM_isJalr <= A_DX_isJalr;
+            A_XM_isAuipc <= A_DX_isAuipc;
+            A_XM_auipcResult <= auipcResult;
+            A_XM_immU <= A_DX_immU;
+            A_XM_isLui <= A_DX_isLui;
+            A_XM_func3 <= A_DX_func3;
+            A_XM_isLoad <= A_DX_isLoad;
+            A_XM_isStore <= A_DX_isStore;
+
+            B_XM_PC <= B_DX_PC;
+            B_XM_inst <= B_DX_inst;
+            B_XM_imm <= B_DX_imm;
+            B_XM_dataA <= B_DX_dataA;
+            B_XM_dataB <= B_DX_dataB;
+            B_XM_ALURESULT <= B_aluResult;
+            B_XM_taken <= taken;
+            B_XM_rd <= B_DX_rd;
+            B_XM_src1 <= B_DX_src1;
+            B_XM_src2 <= B_DX_src2;
+            B_XM_isABranch <= B_DX_isABranch;
+            B_XM_RWE <= B_DX_RWE;
+            B_XM_isJal <= B_DX_isJal;
+            B_XM_isJalr <= B_DX_isJalr;
+            B_XM_isAuipc <= B_DX_isAuipc;
+            B_XM_auipcResult <= auipcResult;
+            B_XM_immU <= B_DX_immU;
+            B_XM_isLui <= B_DX_isLui;
+            B_XM_func3 <= B_DX_func3;
+            B_XM_isLoad <= B_DX_isLoad;
+            B_XM_isStore <= B_DX_isStore;
         end
     end
     // ------------------MEMORY------------------
