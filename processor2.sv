@@ -1,4 +1,4 @@
-module processor(clock, reset);
+module processor2(clock, reset);
     input logic clock;
     input logic reset;
     
@@ -58,7 +58,7 @@ module processor(clock, reset);
         .clock(clock)
     );
 
-    ROM #(.MEMFILE("jal.mem"))
+    ROM #(.MEMFILE("arith_no_hazards.mem"))
 	InstMem(.clk(clock), 
 		.addrA(PC[17:2]), 
 		.dataOutA(A_instruction),
@@ -205,9 +205,11 @@ module processor(clock, reset);
 
     // TODO
     logic load_use_hazard;
-    assign load_use_hazard = DX_isLoad &&
-                  ((DX_rd != 5'b0) && 
-                   ((DX_rd == src1) || (DX_rd == src2)));
+    assign load_use_hazard = 1'b0;
+    // logic load_use_hazard;
+    // assign load_use_hazard = DX_isLoad &&
+    //               ((DX_rd != 5'b0) && 
+    //                ((DX_rd == src1) || (DX_rd == src2)));
 
     // ---------------------------------------
 
@@ -338,27 +340,37 @@ module processor(clock, reset);
 
     // TODO: add forwarding logic
     always_comb begin
-        A_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
-                    (forwardA == 2'b10) ? data_writeReg :
-                    DX_dataA;
-        A_operand2 = DX_ALUinB   ? DX_imm :
-                    DX_isStore  ? DX_immS :
-                    forwardB == 2'b01 ? XM_ALURESULT :
-                    forwardB == 2'b10 ? data_writeReg :
-                    DX_dataB;
-        B_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
-                    (forwardA == 2'b10) ? data_writeReg :
-                    DX_dataA;
-        B_operand2 = DX_ALUinB   ? DX_imm :
-                    DX_isStore  ? DX_immS :
-                    forwardB == 2'b01 ? XM_ALURESULT :
-                    forwardB == 2'b10 ? data_writeReg :
-                    DX_dataB;
+        // A_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
+        //             (forwardA == 2'b10) ? data_writeReg :
+        //             DX_dataA;
+        // A_operand2 = DX_ALUinB   ? DX_imm :
+        //             DX_isStore  ? DX_immS :
+        //             forwardB == 2'b01 ? XM_ALURESULT :
+        //             forwardB == 2'b10 ? data_writeReg :
+        //             DX_dataB;
+        // B_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
+        //             (forwardA == 2'b10) ? data_writeReg :
+        //             DX_dataA;
+        // B_operand2 = DX_ALUinB   ? DX_imm :
+        //             DX_isStore  ? DX_immS :
+        //             forwardB == 2'b01 ? XM_ALURESULT :
+        //             forwardB == 2'b10 ? data_writeReg :
+        //             DX_dataB;
+        A_operand1 = A_DX_dataA;
+        A_operand2 = A_DX_ALUinB ? A_DX_imm :
+                     A_DX_isStore ? A_DX_immS :
+                     A_DX_dataB;
+        B_operand1 = B_DX_dataA;
+        B_operand2 = B_DX_ALUinB ? B_DX_imm :
+                     B_DX_isStore ? B_DX_immS :
+                     B_DX_dataB;
 
     end
 
-    logic [31:0] A_aluResult, A_branchTarget, A_jalTarget, A_jalrTarget, A_auipcResult, A_EX_target;
-    logic [31:0] B_aluResult, B_branchTarget, B_jalTarget, B_jalrTarget, B_auipcResult, B_EX_target;
+    logic [31:0] A_aluResult;
+    logic [31:0] B_aluResult;
+    logic [31:0] branchTarget, jalTarget, jalrTarget, auipcResult;
+    logic [31:0] EX_target;
     logic taken, EX_mispredict;
     logic [1:0] pcSelect; // 00 is PC+4, 01 is branchTarget, 10 is jalTarget, 11 is jalrTarget
     alu ALU_unit_A (
@@ -510,7 +522,8 @@ module processor(clock, reset);
     logic [31:0] dataOut;
     logic [31:0] dataIn;
     // TODO forwarding for superscalar
-    assign dataIn = forwardC ? data_writeReg : B_XM_dataB;
+    //assign dataIn = forwardC ? data_writeReg : B_XM_dataB;
+    assign dataIn = B_XM_dataB;
 
     RAM_wrapper ProcMem(.clk(clock), 
 		.wEn(B_XM_isStore), 
@@ -643,20 +656,21 @@ module processor(clock, reset);
 
 
     // -----------------BYPASS-----------------
+    // TODO
     // 00 is regular, 01 is from M, 10 is from W
     // forwardA is ALU operand A, forwardB is ALU operand B
-    logic [1:0] forwardA, forwardB;
-    // forward C is for store data
-    logic forwardC;
-    always_comb begin
-        forwardA = (DX_src1 != 0 && DX_src1 == XM_rd && XM_RWE) ? 2'b01 :
-                    (DX_src1 != 0 && DX_src1 == MW_rd && MW_RWE) ? 2'b10 :
-                    2'b00;
-        forwardB = (DX_src2 != 0 && DX_src2 == XM_rd && XM_RWE) ? 2'b01 :
-                    (DX_src2 != 0 && DX_src2 == MW_rd && MW_RWE) ? 2'b10 :
-                    2'b00;
-        forwardC = (XM_src2 != 0 && XM_src2 == MW_rd && MW_RWE) ? 1'b1 : 1'b0;  
-    end
+    // logic [1:0] forwardA, forwardB;
+    // // forward C is for store data
+    // logic forwardC;
+    // always_comb begin
+    //     forwardA = (DX_src1 != 0 && DX_src1 == XM_rd && XM_RWE) ? 2'b01 :
+    //                 (DX_src1 != 0 && DX_src1 == MW_rd && MW_RWE) ? 2'b10 :
+    //                 2'b00;
+    //     forwardB = (DX_src2 != 0 && DX_src2 == XM_rd && XM_RWE) ? 2'b01 :
+    //                 (DX_src2 != 0 && DX_src2 == MW_rd && MW_RWE) ? 2'b10 :
+    //                 2'b00;
+    //     forwardC = (XM_src2 != 0 && XM_src2 == MW_rd && MW_RWE) ? 1'b1 : 1'b0;  
+    // end
 
 
 
