@@ -40,7 +40,7 @@ module control(
         A_isLoad = !A_opcode[6] & !A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
         A_isStore = !A_opcode[6] & A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
         A_ALUop = (A_isLoad | A_isStore) ? 4'b0000 : {A_useFunc7 ? A_func7[5] : 1'b0, A_func3};
-        A_ALUinB = !A_opcode[6] & !A_opcode[5] & A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
+        A_ALUinB = A_isLoad || (!A_opcode[6] & !A_opcode[5] & A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0]);
         A_isABranch = A_opcode[6] & A_opcode[5] & !A_opcode[4] & !A_opcode[3] & !A_opcode[2] & A_opcode[1] & A_opcode[0];
         A_RWE = (!A_isABranch & !A_isStore);
         A_isJal = A_opcode[6] & A_opcode[5] & !A_opcode[4] & A_opcode[3] & A_opcode[2] & A_opcode[1] & A_opcode[0];
@@ -52,7 +52,7 @@ module control(
         B_isLoad = !B_opcode[6] & !B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
         B_isStore = !B_opcode[6] & B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
         B_ALUop = (B_isLoad | B_isStore) ? 4'b0000 : {B_useFunc7 ? B_func7[5] : 1'b0, B_func3};
-        B_ALUinB = !B_opcode[6] & !B_opcode[5] & B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
+        B_ALUinB = B_isLoad || (!B_opcode[6] & !B_opcode[5] & B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0]);
         B_isABranch = B_opcode[6] & B_opcode[5] & !B_opcode[4] & !B_opcode[3] & !B_opcode[2] & B_opcode[1] & B_opcode[0];
         B_RWE = (!B_isABranch & !B_isStore);
         B_isJal = B_opcode[6] & B_opcode[5] & !B_opcode[4] & B_opcode[3] & B_opcode[2] & B_opcode[1] & B_opcode[0];

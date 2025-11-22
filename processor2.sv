@@ -338,33 +338,54 @@ module processor2(clock, reset);
     logic [31:0] A_operand1, A_operand2;
     logic [31:0] B_operand1, B_operand2;
 
-    // TODO: add forwarding logic
     always_comb begin
-        // A_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
-        //             (forwardA == 2'b10) ? data_writeReg :
-        //             DX_dataA;
-        // A_operand2 = DX_ALUinB   ? DX_imm :
-        //             DX_isStore  ? DX_immS :
-        //             forwardB == 2'b01 ? XM_ALURESULT :
-        //             forwardB == 2'b10 ? data_writeReg :
-        //             DX_dataB;
-        // B_operand1 = (forwardA == 2'b01) ? XM_ALURESULT :
-        //             (forwardA == 2'b10) ? data_writeReg :
-        //             DX_dataA;
-        // B_operand2 = DX_ALUinB   ? DX_imm :
-        //             DX_isStore  ? DX_immS :
-        //             forwardB == 2'b01 ? XM_ALURESULT :
-        //             forwardB == 2'b10 ? data_writeReg :
-        //             DX_dataB;
-        A_operand1 = A_DX_dataA;
-        A_operand2 = A_DX_ALUinB ? A_DX_imm :
-                     A_DX_isStore ? A_DX_immS :
-                     A_DX_dataB;
-        B_operand1 = B_DX_dataA;
-        B_operand2 = B_DX_ALUinB ? B_DX_imm :
-                     B_DX_isStore ? B_DX_immS :
-                     B_DX_dataB;
+        // A pipeline 
+        case (A_F_ALU1)
+            3'b010: A_operand1 = A_XM_ALURESULT;       // from A MEM
+            3'b011: A_operand1 = B_XM_ALURESULT;       // from B MEM
+            3'b100: A_operand1 = A_data_writeReg;      // from A WB
+            3'b101: A_operand1 = B_data_writeReg;      // from B WB
+            default: A_operand1 = A_DX_dataA;          // from regfile
+        endcase
 
+        case (A_F_ALU2)
+            3'b010: A_operand2 = A_XM_ALURESULT;       // from A MEM
+            3'b011: A_operand2 = B_XM_ALURESULT;       // from B MEM
+            3'b100: A_operand2 = A_data_writeReg;      // from A WB
+            3'b101: A_operand2 = B_data_writeReg;      // from B WB
+            default: begin
+                if (A_DX_ALUinB)
+                    A_operand2 = A_DX_imm;
+                else if (A_DX_isStore)
+                    A_operand2 = A_DX_immS;
+                else
+                    A_operand2 = A_DX_dataB;           // normal regfile value
+            end
+        endcase
+
+        // B pipeline
+        case (B_F_ALU1)
+            3'b010: B_operand1 = A_XM_ALURESULT;       // from A MEM
+            3'b011: B_operand1 = B_XM_ALURESULT;       // from B MEM
+            3'b100: B_operand1 = A_data_writeReg;      // from A WB
+            3'b101: B_operand1 = B_data_writeReg;      // from B WB
+            default: B_operand1 = B_DX_dataA;          // from regfile
+        endcase
+
+        case (B_F_ALU2)
+            3'b010: B_operand2 = A_XM_ALURESULT;       // from A MEM
+            3'b011: B_operand2 = B_XM_ALURESULT;       // from B MEM
+            3'b100: B_operand2 = A_data_writeReg;      // from A WB
+            3'b101: B_operand2 = B_data_writeReg;      // from B WB
+            default: begin
+                if (B_DX_ALUinB)
+                    B_operand2 = B_DX_imm;
+                else if (B_DX_isStore)
+                    B_operand2 = B_DX_immS;
+                else
+                    B_operand2 = B_DX_dataB;
+            end
+        endcase
     end
 
     logic [31:0] A_aluResult;
@@ -521,9 +542,14 @@ module processor2(clock, reset);
 
     logic [31:0] dataOut;
     logic [31:0] dataIn;
-    // TODO forwarding for superscalar
-    //assign dataIn = forwardC ? data_writeReg : B_XM_dataB;
-    assign dataIn = B_XM_dataB;
+
+    always_comb begin
+        case (MEM_F)
+            2'b01: dataIn = A_data_writeReg;  // forward from A WB
+            2'b10: dataIn = B_data_writeReg;  // forward from B WB
+            default: dataIn = B_XM_dataB;       // regular store data
+        endcase
+    end
 
     RAM_wrapper ProcMem(.clk(clock), 
 		.wEn(B_XM_isStore), 
@@ -656,21 +682,45 @@ module processor2(clock, reset);
 
 
     // -----------------BYPASS-----------------
-    // TODO
-    // 00 is regular, 01 is from M, 10 is from W
-    // forwardA is ALU operand A, forwardB is ALU operand B
-    // logic [1:0] forwardA, forwardB;
-    // // forward C is for store data
-    // logic forwardC;
-    // always_comb begin
-    //     forwardA = (DX_src1 != 0 && DX_src1 == XM_rd && XM_RWE) ? 2'b01 :
-    //                 (DX_src1 != 0 && DX_src1 == MW_rd && MW_RWE) ? 2'b10 :
-    //                 2'b00;
-    //     forwardB = (DX_src2 != 0 && DX_src2 == XM_rd && XM_RWE) ? 2'b01 :
-    //                 (DX_src2 != 0 && DX_src2 == MW_rd && MW_RWE) ? 2'b10 :
-    //                 2'b00;
-    //     forwardC = (XM_src2 != 0 && XM_src2 == MW_rd && MW_RWE) ? 1'b1 : 1'b0;  
-    // end
+    logic [2:0] A_F_ALU1, A_F_ALU2;
+    logic [2:0] B_F_ALU1, B_F_ALU2;
+    logic [1:0] MEM_F;
+    always_comb begin
+        // default: no forwarding (000)
+        A_F_ALU1 = 3'b000;
+        A_F_ALU2 = 3'b000;
+        B_F_ALU1 = 3'b000;
+        B_F_ALU2 = 3'b000;
+        MEM_F    = 2'b00;
+
+        // -------- A ALU operand 1 --------
+        if      (A_XM_RWE && (A_XM_rd != 0) && (A_XM_rd == A_DX_src1)) A_F_ALU1 = 3'b010;
+        else if (B_XM_RWE && (B_XM_rd != 0) && (B_XM_rd == A_DX_src1)) A_F_ALU1 = 3'b011;
+        else if (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == A_DX_src1)) A_F_ALU1 = 3'b100;
+        else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == A_DX_src1)) A_F_ALU1 = 3'b101;
+        // -------- A ALU operand 2 -------
+        if      (A_XM_RWE && (A_XM_rd != 0) && (A_XM_rd == A_DX_src2)) A_F_ALU2 = 3'b010;
+        else if (B_XM_RWE && (B_XM_rd != 0) && (B_XM_rd == A_DX_src2)) A_F_ALU2 = 3'b011;
+        else if (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == A_DX_src2)) A_F_ALU2 = 3'b100;
+        else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == A_DX_src2)) A_F_ALU2 = 3'b101;
+        // -------- B ALU operand 1 -------
+        if      (A_XM_RWE && (A_XM_rd != 0) && (A_XM_rd == B_DX_src1)) B_F_ALU1 = 3'b010;
+        else if (B_XM_RWE && (B_XM_rd != 0) && (B_XM_rd == B_DX_src1)) B_F_ALU1 = 3'b011;
+        else if (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == B_DX_src1)) B_F_ALU1 = 3'b100;
+        else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == B_DX_src1)) B_F_ALU1 = 3'b101;
+        // -------- B ALU operand 2 -------
+        if      (A_XM_RWE && (A_XM_rd != 0) && (A_XM_rd == B_DX_src2)) B_F_ALU2 = 3'b010;
+        else if (B_XM_RWE && (B_XM_rd != 0) && (B_XM_rd == B_DX_src2)) B_F_ALU2 = 3'b011;
+        else if (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == B_DX_src2)) B_F_ALU2 = 3'b100;
+        else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == B_DX_src2)) B_F_ALU2 = 3'b101;
+
+        // -------- Store data forwarding (MEM_F) --------
+        // 01 -> from A WB stage, 10 -> from B WB stage
+        if      (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == A_XM_src2)) MEM_F = 2'b01;
+        else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == B_XM_src2)) MEM_F = 2'b10;
+    end
+
+
 
 
 

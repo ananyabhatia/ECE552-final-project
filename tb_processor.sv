@@ -25,7 +25,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #200;         // run ~200 cycles
+        #500;         // run ~200 cycles
         $finish;
     end
 
@@ -79,18 +79,26 @@ module tb_processor;
             $display("alu b input 1 =%h", uut.B_operand1);
             $display("alu b input 2 =%h", uut.B_operand2);
             $display("alu b result =%h", uut.B_aluResult);
-            $display("reg file a read 1 =%h", uut.A_data_readReg1);
-            $display("reg file a read 2 =%h", uut.A_data_readReg2);
-            $display("reg file b read 1 =%h", uut.B_data_readReg1);
-            $display("reg file b read 2 =%h", uut.B_data_readReg2);
-            $display("reg file a source 1 =%h", uut.A_src1);
-            $display("reg file a source 2 =%h", uut.A_src2);
-            $display("reg file b source 1 =%h", uut.B_src1);
-            $display("reg file b source 2 =%h", uut.B_src2);
-            $display("A source 1=%h", uut.A_rs1);
-            $display("A source 2=%h", uut.A_rs2);
-            $display("B source 1=%h", uut.B_rs1);
-            $display("B source 2=%h", uut.B_rs2);
+            $display("B_DX_imm=%h", uut.B_DX_imm);
+            $display("xmisstore=%h", uut.B_XM_isStore);
+            $display("xma address=%h", uut.B_XM_ALURESULT);
+            $display("xma data=%h", uut.dataIn);
+            $display("xm func3=%h", uut.B_XM_func3);
+            $display("xm data out=%h", uut.dataOut);
+            $display("A xm instruction=%h", uut.A_XM_inst);
+            $display("B xm instruction=%h", uut.B_XM_inst);
+            // $display("reg file a read 1 =%h", uut.A_data_readReg1);
+            // $display("reg file a read 2 =%h", uut.A_data_readReg2);
+            // $display("reg file b read 1 =%h", uut.B_data_readReg1);
+            // $display("reg file b read 2 =%h", uut.B_data_readReg2);
+            // $display("reg file a source 1 =%h", uut.A_src1);
+            // $display("reg file a source 2 =%h", uut.A_src2);
+            // $display("reg file b source 1 =%h", uut.B_src1);
+            // $display("reg file b source 2 =%h", uut.B_src2);
+            // $display("A source 1=%h", uut.A_rs1);
+            // $display("A source 2=%h", uut.A_rs2);
+            // $display("B source 1=%h", uut.B_rs1);
+            // $display("B source 2=%h", uut.B_rs2);
             $display("x0  = %h",  uut.RegisterFile.regs[0]);
             $display("x1  = %h",  uut.RegisterFile.regs[1]);
             $display("x2  = %h",  uut.RegisterFile.regs[2]);
