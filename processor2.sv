@@ -48,7 +48,7 @@ module processor2(clock, reset);
     always_ff @(negedge clock or posedge reset) begin: program_counter
         if (reset)
             PC <= 32'b0;
-        else if (!load_use_hazard)
+        else if (!load_use_hazard && !intra_packet_hazard)
             PC <= nextPC;
     end
     bp branch_predictor(
@@ -79,7 +79,7 @@ module processor2(clock, reset);
             FD_prediction <= 1'b0;
             FD_target <= 32'b0;
         end
-        else if (!load_use_hazard) begin
+        else if (!load_use_hazard && !intra_packet_hazard) begin
             A_FD_PC <= PC;
             B_FD_PC <= PCplus4;
 
@@ -90,6 +90,24 @@ module processor2(clock, reset);
                 A_FD_inst <= A_instruction;  // normal dual issue
                 B_FD_inst <= B_instruction;
             end
+            FD_prediction <= dir_pred;
+            FD_target <= tar_pred;
+        end
+        else if (intra_packet_hazard) begin
+            A_FD_inst <= NOP; // kill A
+            B_FD_inst <= B_FD_inst; // keep B
+            A_FD_PC <= A_FD_PC; // keep A
+            B_FD_PC <= B_FD_PC; // keep B
+
+            FD_prediction <= FD_prediction; // keep prediction
+            FD_target <= FD_target; // keep target
+        end
+        else begin
+            A_FD_inst <= A_instruction;  // normal dual issue
+            B_FD_inst <= B_instruction;
+            A_FD_PC <= PC;
+            B_FD_PC <= PCplus4;
+
             FD_prediction <= dir_pred;
             FD_target <= tar_pred;
         end
@@ -251,6 +269,58 @@ module processor2(clock, reset);
             A_DX_isLoad <= 1'b0;
             A_DX_prediction <= 1'b0;
             A_DX_target <= 32'b0;
+
+            B_DX_PC <= B_DX_PC;
+            B_DX_inst <= 32'b0; // insert bubble
+            B_DX_imm <= 32'b0;
+            B_DX_immS <= 32'b0;
+            B_DX_immB <= 32'b0;
+            B_DX_immU <= 32'b0;
+            B_DX_immJ <= 32'b0;
+            B_DX_dataA <= 32'b0;
+            B_DX_dataB <= 32'b0;
+            B_DX_ALUop <= 4'b0;
+            B_DX_ALUinB <= 1'b0;
+            B_DX_func3 <= 3'b0;
+            B_DX_rd <= 5'b0;
+            B_DX_src1 <= 5'b0;
+            B_DX_src2 <= 5'b0;
+            B_DX_isABranch <= 1'b0;
+            B_DX_RWE <= 1'b0;
+            B_DX_isJal <= 1'b0;
+            B_DX_isJalr <= 1'b0;
+            B_DX_isAuipc <= 1'b0;
+            B_DX_isLui <= 1'b0;
+            B_DX_isStore <= 1'b0;
+            B_DX_isLoad <= 1'b0;
+            B_DX_prediction <= 1'b0;
+            B_DX_target <= 32'b0;
+        end else if(intra_packet_hazard) begin
+            A_DX_PC <= A_FD_PC;
+            A_DX_inst <= A_FD_inst;
+            A_DX_imm <= A_imm_I;
+            A_DX_immS <= A_imm_S;
+            A_DX_immB <= A_imm_B;
+            A_DX_immU <= A_imm_U;
+            A_DX_immJ <= A_imm_J;
+            A_DX_dataA <= A_data_readReg1;
+            A_DX_dataB <= A_data_readReg2;
+            A_DX_ALUop <= A_ALUop;
+            A_DX_ALUinB <= A_ALUinB;
+            A_DX_rd <= A_dest;
+            A_DX_src1 <= A_src1;
+            A_DX_src2 <= A_src2;
+            A_DX_isABranch <= A_isABranch;
+            A_DX_RWE <= A_RWE;
+            A_DX_func3 <= A_func3;
+            A_DX_isJal <= A_isJal;
+            A_DX_isJalr <= A_isJalr;
+            A_DX_isAuipc <= A_isAuipc;
+            A_DX_isLui <= A_isLui;
+            A_DX_isStore <= A_isStore;
+            A_DX_isLoad <= A_isLoad;
+            A_DX_prediction <= FD_prediction;
+            A_DX_target <= FD_target;
 
             B_DX_PC <= B_DX_PC;
             B_DX_inst <= 32'b0; // insert bubble
