@@ -1,6 +1,18 @@
-module processor2(clock, reset);
+module processor2(clock, reset, counter_out);
     input logic clock;
-    input logic reset;
+    input logic reset;  
+    output logic [31:0] counter_out;  
+
+    logic [31:0] counter;
+
+    always_ff @(posedge clock or posedge reset) begin
+        if (reset)
+            counter <= 32'd0;
+        else
+            counter <= counter + 32'd1;
+    end
+    assign counter_out = counter;
+
     
     // ----------------FETCH-----------------
 
