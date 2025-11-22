@@ -203,13 +203,11 @@ module processor2(clock, reset);
         .B_data_readReg2(B_data_readReg2)
     );
 
-    // TODO
     logic load_use_hazard;
-    assign load_use_hazard = 1'b0;
-    // logic load_use_hazard;
-    // assign load_use_hazard = DX_isLoad &&
-    //               ((DX_rd != 5'b0) && 
-    //                ((DX_rd == src1) || (DX_rd == src2)));
+    assign load_use_hazard = B_DX_isLoad && B_DX_RWE && (B_DX_rd != 5'd0) &&
+                          ((B_DX_rd == A_src1) || (B_DX_rd == A_src2) || (B_DX_rd == B_src1) || (B_DX_rd == B_src2));
+    logic intra_packet_hazard;
+    assign intra_packet_hazard = (A_RWE && (A_dest != 5'd0) && ((A_dest == B_src1) || (A_dest == B_src2) || (A_dest == B_dest)));
 
     // ---------------------------------------
 
