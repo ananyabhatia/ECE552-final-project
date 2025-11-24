@@ -60,7 +60,7 @@ module processor2(clock, reset, counter_out);
     always_ff @(negedge clock or posedge reset) begin: program_counter
         if (reset)
             PC <= 32'b0;
-        else if (!load_use_hazard && !intra_packet_hazard)
+        else if ((load_use_hazard !== 1'b1) && (intra_packet_hazard !== 1'b1))
             PC <= nextPC;
     end
     bp branch_predictor(
@@ -98,12 +98,22 @@ module processor2(clock, reset, counter_out);
             if (isCtrlA || isMemA) begin
                 A_FD_inst <= NOP;            // kill A (can’t go before control)
                 B_FD_inst <= A_instruction;  // place the control or mem in slot B
+                A_FD_PC <= PC;
+                B_FD_PC <= PC;
             end else begin
                 A_FD_inst <= A_instruction;  // normal dual issue
                 B_FD_inst <= B_instruction;
             end
             FD_prediction <= dir_pred;
             FD_target <= tar_pred;
+        end
+        else if (load_use_hazard) begin
+            A_FD_inst     <= A_FD_inst;  // keep current A instruction
+            B_FD_inst     <= B_FD_inst;  // keep current B instruction
+            A_FD_PC       <= A_FD_PC;    // hold PCs
+            B_FD_PC       <= B_FD_PC;
+            FD_prediction <= FD_prediction;
+            FD_target     <= FD_target;
         end
         else if (intra_packet_hazard) begin
             A_FD_inst <= NOP; // kill A
@@ -113,15 +123,6 @@ module processor2(clock, reset, counter_out);
 
             FD_prediction <= FD_prediction; // keep prediction
             FD_target <= FD_target; // keep target
-        end
-        else begin
-            A_FD_inst <= A_instruction;  // normal dual issue
-            B_FD_inst <= B_instruction;
-            A_FD_PC <= PC;
-            B_FD_PC <= PCplus4;
-
-            FD_prediction <= dir_pred;
-            FD_target <= tar_pred;
         end
     end
 
@@ -419,54 +420,55 @@ module processor2(clock, reset, counter_out);
     logic [31:0] B_operand1, B_operand2;
 
     always_comb begin
-        // A pipeline 
+        // ---------- A pipeline ----------
+        // Operand 1 never uses immediates
         case (A_F_ALU1)
-            3'b010: A_operand1 = A_XM_ALURESULT;       // from A MEM
-            3'b011: A_operand1 = B_XM_ALURESULT;       // from B MEM
-            3'b100: A_operand1 = A_data_writeReg;      // from A WB
-            3'b101: A_operand1 = B_data_writeReg;      // from B WB
-            default: A_operand1 = A_DX_dataA;          // from regfile
+            3'b010: A_operand1 = A_XM_ALURESULT;
+            3'b011: A_operand1 = B_XM_ALURESULT;
+            3'b100: A_operand1 = A_data_writeReg;
+            3'b101: A_operand1 = B_data_writeReg;
+            default: A_operand1 = A_DX_dataA;
         endcase
 
-        case (A_F_ALU2)
-            3'b010: A_operand2 = A_XM_ALURESULT;       // from A MEM
-            3'b011: A_operand2 = B_XM_ALURESULT;       // from B MEM
-            3'b100: A_operand2 = A_data_writeReg;      // from A WB
-            3'b101: A_operand2 = B_data_writeReg;      // from B WB
-            default: begin
-                if (A_DX_ALUinB)
-                    A_operand2 = A_DX_imm;
-                else if (A_DX_isStore)
-                    A_operand2 = A_DX_immS;
-                else
-                    A_operand2 = A_DX_dataB;           // normal regfile value
-            end
-        endcase
+        // Operand 2: immediates/store offsets have highest priority
+        if (A_DX_ALUinB)
+            A_operand2 = A_DX_imm;
+        else if (A_DX_isStore)
+            A_operand2 = A_DX_immS;
+        else begin
+            case (A_F_ALU2)
+                3'b010: A_operand2 = A_XM_ALURESULT;
+                3'b011: A_operand2 = B_XM_ALURESULT;
+                3'b100: A_operand2 = A_data_writeReg;
+                3'b101: A_operand2 = B_data_writeReg;
+                default: A_operand2 = A_DX_dataB;
+            endcase
+        end
 
-        // B pipeline
+        // ---------- B pipeline ----------
         case (B_F_ALU1)
-            3'b010: B_operand1 = A_XM_ALURESULT;       // from A MEM
-            3'b011: B_operand1 = B_XM_ALURESULT;       // from B MEM
-            3'b100: B_operand1 = A_data_writeReg;      // from A WB
-            3'b101: B_operand1 = B_data_writeReg;      // from B WB
-            default: B_operand1 = B_DX_dataA;          // from regfile
+            3'b010: B_operand1 = A_XM_ALURESULT;
+            3'b011: B_operand1 = B_XM_ALURESULT;
+            3'b100: B_operand1 = A_data_writeReg;
+            3'b101: B_operand1 = B_data_writeReg;
+            default: B_operand1 = B_DX_dataA;
         endcase
 
-        case (B_F_ALU2)
-            3'b010: B_operand2 = A_XM_ALURESULT;       // from A MEM
-            3'b011: B_operand2 = B_XM_ALURESULT;       // from B MEM
-            3'b100: B_operand2 = A_data_writeReg;      // from A WB
-            3'b101: B_operand2 = B_data_writeReg;      // from B WB
-            default: begin
-                if (B_DX_ALUinB)
-                    B_operand2 = B_DX_imm;
-                else if (B_DX_isStore)
-                    B_operand2 = B_DX_immS;
-                else
-                    B_operand2 = B_DX_dataB;
-            end
-        endcase
+        if (B_DX_ALUinB)
+            B_operand2 = B_DX_imm;
+        else if (B_DX_isStore)
+            B_operand2 = B_DX_immS;
+        else begin
+            case (B_F_ALU2)
+                3'b010: B_operand2 = A_XM_ALURESULT;
+                3'b011: B_operand2 = B_XM_ALURESULT;
+                3'b100: B_operand2 = A_data_writeReg;
+                3'b101: B_operand2 = B_data_writeReg;
+                default: B_operand2 = B_DX_dataB;
+            endcase
+        end
     end
+
 
     logic [31:0] A_aluResult;
     logic [31:0] B_aluResult;
@@ -742,6 +744,7 @@ module processor2(clock, reset, counter_out);
     end
 
     // ------------------WRITEBACK----------------
+    
     logic [4:0] A_WB_destination, B_WB_destination;
 
     logic [31:0] A_data_writeReg, B_data_writeReg;
@@ -796,7 +799,7 @@ module processor2(clock, reset, counter_out);
 
         // -------- Store data forwarding (MEM_F) --------
         // 01 -> from A WB stage, 10 -> from B WB stage
-        if      (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == A_XM_src2)) MEM_F = 2'b01;
+        if      (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == B_XM_src2)) MEM_F = 2'b01;
         else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == B_XM_src2)) MEM_F = 2'b10;
     end
 

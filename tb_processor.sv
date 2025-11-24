@@ -25,7 +25,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #500;         // run ~200 cycles
+        #200;         // run ~200 cycles
         $finish;
     end
 
@@ -42,7 +42,9 @@ module tb_processor;
             // $display("data write reg=%h", uut.data_writeReg);
             // $display("instruction=%h", uut.instruction);
             // $display("MW_inst=%h", uut.MW_inst);
-            // $display("load_use_hazard=%b", uut.load_use_hazard);
+            $display("load_use_hazard=%b", uut.load_use_hazard);
+            $display("intra_packet_hazard=%b", uut.intra_packet_hazard);
+            $display("nextPC=%h", uut.nextPC);
             // $display("dataout=%h", uut.dataOut);
             // $display("XMinst=%h", uut.XM_inst);
             // $display("XM_isStore=%b", uut.XM_isStore);
@@ -50,7 +52,8 @@ module tb_processor;
             // $display("XM_ALUResult=%h", uut.XM_ALURESULT);
             // $display("datain=%h", uut.dataIn);
             // $display("XM func3=%b", uut.XM_func3);
-            // $display("mispredict=%b", uut.EX_mispredict);
+            $display("mispredict=%b", uut.EX_mispredict);
+            $display("ex target=%h", uut.EX_target);
             // $display("PC=%b", uut.PC);
             // $display("nextpc=%b", uut.nextPC);
             // $display("DX_isload=%b", uut.DX_isLoad);
@@ -87,6 +90,10 @@ module tb_processor;
             $display("xm data out=%h", uut.dataOut);
             $display("A xm instruction=%h", uut.A_XM_inst);
             $display("B xm instruction=%h", uut.B_XM_inst);
+            $display("MEMF=%b", uut.MEM_F);
+            $display("A_MW_rd=%h", uut.A_MW_rd);
+            $display("B_XM_src2=%h", uut.B_XM_src2);
+            $display("A_MW_RWE=%h", uut.A_MW_RWE);
             // $display("reg file a read 1 =%h", uut.A_data_readReg1);
             // $display("reg file a read 2 =%h", uut.A_data_readReg2);
             // $display("reg file b read 1 =%h", uut.B_data_readReg1);
