@@ -57,4 +57,12 @@ module RAM
         end
     end
 
+    // always @(posedge clkA) begin
+    //     $display("ram addr = %h", addrA);
+    //     $display("ram data in = %h", dinA);
+    //     $display("ram write enable = %b", weA);
+    //     $display("ram data out = %h", doutA);
+    //     $display("ram block f0= %h", ram_block[8'h0000003c]);
+    // end
+
 endmodule // bytewrite_tdp_ram_rf

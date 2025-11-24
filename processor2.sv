@@ -11,7 +11,7 @@ module processor2(clock, reset, counter_out);
         else
             counter <= counter + 32'd1;
     end
-    assign counter_out = counter;
+    
 
     
     // ----------------FETCH-----------------
@@ -60,6 +60,8 @@ module processor2(clock, reset, counter_out);
     always_ff @(negedge clock or posedge reset) begin: program_counter
         if (reset)
             PC <= 32'b0;
+        else if (EX_mispredict)
+            PC <= EX_target;
         else if ((load_use_hazard !== 1'b1) && (intra_packet_hazard !== 1'b1))
             PC <= nextPC;
     end
@@ -481,7 +483,7 @@ module processor2(clock, reset, counter_out);
         .operandB(A_operand2),
         .ALUop(A_DX_ALUop),
         .result(A_aluResult),
-        .branch(taken)
+        .branch(trash)
     );
     logic trash;
     alu ALU_unit_B (
@@ -489,7 +491,7 @@ module processor2(clock, reset, counter_out);
         .operandB(B_operand2),
         .ALUop(B_DX_ALUop),
         .result(B_aluResult),
-        .branch(trash)
+        .branch(taken)
     );
     always_comb begin
         branchTarget = B_DX_PC + B_DX_immB;
@@ -744,7 +746,7 @@ module processor2(clock, reset, counter_out);
     end
 
     // ------------------WRITEBACK----------------
-    
+
     logic [4:0] A_WB_destination, B_WB_destination;
 
     logic [31:0] A_data_writeReg, B_data_writeReg;
@@ -762,7 +764,12 @@ module processor2(clock, reset, counter_out);
                         B_MW_isLoad ? B_MW_dmemOut :
                         B_MW_ALURESULT;
     end
-
+    // Custom halt instruction: Opcode = 0001011 0x0000000B
+    always_ff @(negedge clock or posedge reset) begin
+        if (A_MW_inst[6:0] == 7'b0001011 || B_MW_inst[6:0] == 7'b0001011) begin
+            counter_out <= counter;
+        end
+    end
 
     // -----------------BYPASS-----------------
     logic [2:0] A_F_ALU1, A_F_ALU2;
