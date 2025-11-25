@@ -809,9 +809,4 @@ module processor2(clock, reset, counter_out);
         if      (A_MW_RWE && (A_MW_rd != 0) && (A_MW_rd == B_XM_src2)) MEM_F = 2'b01;
         else if (B_MW_RWE && (B_MW_rd != 0) && (B_MW_rd == B_XM_src2)) MEM_F = 2'b10;
     end
-
-
-
-
-
 endmodule
