@@ -65,14 +65,16 @@ module processor2(clock, reset, counter_out);
         else if ((load_use_hazard !== 1'b1) && (intra_packet_hazard !== 1'b1))
             PC <= nextPC;
     end
-    bp branch_predictor(
-        .PC(PC),
-        .direction(dir_pred),
-        .target(tar_pred),
-        .clock(clock)
-    );
+    // bp branch_predictor(
+    //     .PC(PC),
+    //     .direction(dir_pred),
+    //     .target(tar_pred),
+    //     .clock(clock)
+    // );
+    assign dir_pred = 1'b0;
+    assign tar_pred = 32'b0;
 
-    ROM #(.MEMFILE("arith_no_hazards.mem"))
+    ROM #(.MEMFILE("Microbenchmarks/micro2.mem"))
 	InstMem(.clk(clock), 
 		.addrA(PC[17:2]), 
 		.dataOutA(A_instruction),

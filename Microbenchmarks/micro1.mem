@@ -1,0 +1,7 @@
+// Microbenchmark testing tight loop with often-taken branches
+00000093   // addi x1, x0, 0        
+1F400113   // addi x2, x0, 500     
+00000013   // nop
+00000013   // nop
+00108093   // addi x1, x1, 1       
+FE209EE3   // blt x1, x2, -2    

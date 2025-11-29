@@ -1,0 +1,12 @@
+./tristate.sv
+./ROM.sv
+./RAM_wrapper.sv
+./alu.sv
+./tb_processor.sv
+./bp.sv
+./processor2.sv
+./setsourcedest.sv
+./decoder32.sv
+./RAM.sv
+./regfile.sv
+./control.sv

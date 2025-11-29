@@ -30,10 +30,12 @@ module control(
     logic A_load;
     logic A_store;
     logic A_useFunc7;
+    logic A_isHalt;
 
     logic B_load;
     logic B_store;
     logic B_useFunc7;
+    logic B_isHalt;
     // A_MW_inst[6:0] == 7'b0001011 || B_MW_inst[6:0] == 7'b0001011
     always_comb begin
         A_useFunc7 = A_opcode == 7'b0110011 || (A_opcode == 7'b0010011 && (A_func3 == 3'b101 || A_func3 == 3'b001));

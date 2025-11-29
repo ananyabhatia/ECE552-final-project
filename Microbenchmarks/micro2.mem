@@ -1,0 +1,8 @@
+00000093   // addi x1, x0, 0        (x1 = 0, counter)
+1F400113   // addi x2, x0, 500      (x2 = 500, limit)
+0010F193   // andi x3, x1, 1        (x3 = x1 & 1, get LSB)
+00018463   // beq x3, x0, +8        (if even, skip forward)
+0080006F   // jal x0, +8            (jump over next instruction)
+00120213   // addi x4, x4, 1        (keep track of number of times x1 is even)   
+00108093   // addi x1, x1, 1        (x1++)
+FE2096E3   // blt x1, x2, -10       (branch back if x1 < x2)
