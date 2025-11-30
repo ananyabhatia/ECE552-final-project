@@ -38,19 +38,17 @@ module processor2(clock, reset, counter_out);
 
         isCtrlA = (opcodeA == 7'b1100011) || // branch
                  (opcodeA == 7'b1101111) || // jal
-                 (opcodeA == 7'b1100111) || // jalr
-                 (opcodeA == 7'b0010111); // auipc   
+                 (opcodeA == 7'b1100111) ; // jalr   
         isCtrlB = (opcodeB == 7'b1100011) || // branch
                  (opcodeB == 7'b1101111) || // jal
-                 (opcodeB == 7'b1100111) || // jalr
-                 (opcodeB == 7'b0010111); // auipc
+                 (opcodeB == 7'b1100111); // jalr
 
         isMemA  = (opcodeA == 7'b0000011) || (opcodeA == 7'b0100011); // load or store
         isMemB  = (opcodeB == 7'b0000011) || (opcodeB == 7'b0100011); // load or store
         
         if (isCtrlA || isMemA)
             nextPC = PCplus4;
-        if (dir_pred)
+        if (dir_pred && isCtrlA)
             nextPC = tar_pred;
         if (EX_mispredict) 
             nextPC = EX_target;
