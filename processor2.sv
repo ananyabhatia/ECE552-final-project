@@ -74,7 +74,7 @@ module processor2(clock, reset, counter_out);
     assign dir_pred = 1'b0;
     assign tar_pred = 32'b0;
 
-    ROM #(.MEMFILE("Microbenchmarks/micro2.mem"))
+    ROM #(.MEMFILE("arith_no_hazards.mem"))
 	InstMem(.clk(clock), 
 		.addrA(PC[17:2]), 
 		.dataOutA(A_instruction),
