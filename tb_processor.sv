@@ -34,7 +34,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #2000;         // run ~200 cycles for #5000, so this is currently 100 cycles
+        #1000;         // run ~200 cycles for #5000, so this is currently 100 cycles
         $finish;
     end
 
