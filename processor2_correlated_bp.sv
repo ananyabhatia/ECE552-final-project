@@ -839,7 +839,9 @@ localparam NOP = 32'h00000013; // addi x0,x0,0
 
     // Custom halt instruction: Opcode = 0001011 0x0000000B
     always_ff @(negedge clock or posedge reset) begin
-        if (A_MW_inst[6:0] == 7'b0001011 || B_MW_inst[6:0] == 7'b0001011) begin
+        if (reset) begin
+            counter_out <= 32'b0;
+        end else if (A_MW_inst[6:0] == 7'b0001011 || B_MW_inst[6:0] == 7'b0001011) begin
             counter_out <= counter;
         end
     end
