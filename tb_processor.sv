@@ -32,7 +32,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #5000;         // run ~200 cycles for #5000, so this is currently 100 cycles
+        #4700;         // run ~200 cycles for #5000, so this is currently 100 cycles
         $finish;
     end
 
@@ -43,7 +43,7 @@ module tb_processor;
     end
 
     // print register contents each cycle
-    always_ff @(posedge half_clock) begin
+    always_ff @(posedge clock) begin
         if (!reset) begin
             $display("\nCycle %0t | PC=%d", $time/10, uut.PC);
             // $display("data write reg=%h", uut.data_writeReg);
@@ -89,7 +89,7 @@ module tb_processor;
             // $display("alu b input 1 =%h", uut.B_operand1);
             // $display("alu b input 2 =%h", uut.B_operand2);
             // $display("alu b result =%h", uut.B_aluResult);
-            // // $display("B_DX_imm=%h", uut.B_DX_imm);
+            // $display("B_DX_imm=%h", uut.B_DX_imm);
             // $display("xmisstore=%h", uut.B_XM_isStore);
             // $display("xmisload=%h", uut.B_XM_isLoad);
             // $display("xma address=%h", uut.B_XM_ALURESULT);
@@ -99,10 +99,10 @@ module tb_processor;
             // $display("A xm instruction=%h", uut.A_XM_inst);
             // $display("B xm instruction=%h", uut.B_XM_inst);
             // $display("nextpc=%h", uut.nextPC);
-            // //$display("extarget=%b", uut.EX_target);
+            // $display("extarget=%b", uut.EX_target);
             // $display("mispredict=%b", uut.EX_mispredict);
             // $display("EX taken=%b", uut.taken);
-            // //$display("jalrtarget=%b", uut.jalrTarget);
+            // $display("jalrtarget=%b", uut.jalrTarget);
             // $display("B_operand1=%h", uut.B_operand1);
             // $display("B_DX_imm=%h", uut.B_DX_imm);
             // $display("B_F_ALU1=%h", uut.B_F_ALU1);
@@ -128,6 +128,12 @@ module tb_processor;
             // $display("A source 2=%h", uut.A_rs2);
             // $display("B source 1=%h", uut.B_rs1);
             // $display("B source 2=%h", uut.B_rs2);
+            $display("A MW Inst=%h", uut.A_MW_inst);
+            $display("B MW Inst=%h", uut.B_MW_inst);
+            // $display("A MW RWE=%b", uut.A_MW_RWE);
+            // $display("B MW RWE=%b", uut.B_MW_RWE);
+            // $display("A MW data=%h", uut.A_data_writeReg);
+            // $display("B MW data=%h", uut.B_data_writeReg);
             $display("x0  = %d",  uut.RegisterFile.regs[0]);
             $display("x1  = %d",  uut.RegisterFile.regs[1]);
             $display("x2  = %d",  uut.RegisterFile.regs[2]);
@@ -136,11 +142,11 @@ module tb_processor;
             $display("x5  = %d",  uut.RegisterFile.regs[5]);
             $display("x6  = %d",  uut.RegisterFile.regs[6]);
             $display("x7  = %d",  uut.RegisterFile.regs[7]);
-            // $display("x8  = %d",  uut.RegisterFile.regs[8]);
-            // $display("x9  = %d",  uut.RegisterFile.regs[9]);
-            // $display("x10 = %d",  uut.RegisterFile.regs[10]);
-            // $display("x11 = %h",  uut.RegisterFile.regs[11]);
-            // $display("x12 = %h",  uut.RegisterFile.regs[12]);
+            $display("x8  = %d",  uut.RegisterFile.regs[8]);
+            $display("x9  = %d",  uut.RegisterFile.regs[9]);
+            $display("x10 = %d",  uut.RegisterFile.regs[10]);
+            $display("x11 = %d",  $signed(uut.RegisterFile.regs[11]));
+            $display("x12 = %d",  uut.RegisterFile.regs[12]);
             // $display("x13 = %h",  uut.RegisterFile.regs[13]);
             // $display("x14 = %h",  uut.RegisterFile.regs[14]);
             // $display("x15 = %h",  uut.RegisterFile.regs[15]);
