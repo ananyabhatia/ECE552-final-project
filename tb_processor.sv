@@ -5,10 +5,12 @@ module tb_processor;
     logic clock;
     logic reset;
     logic half_clock;
+    logic [31:0] counter_out;
 
     processor2 uut (
         .clock(clock),
-        .reset(reset)
+        .reset(reset),
+        .counter_out(counter_out)
     );
 
     // clock generation
@@ -45,6 +47,7 @@ module tb_processor;
     // print register contents each cycle
     always_ff @(posedge clock) begin
         if (!reset) begin
+            $display("Counter=%0d", counter_out);
             $display("\nCycle %0t | PC=%d", $time/10, uut.PC);
             // $display("data write reg=%h", uut.data_writeReg);
             // $display("instruction=%h", uut.instruction);
