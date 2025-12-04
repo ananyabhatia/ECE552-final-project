@@ -70,7 +70,7 @@ localparam NOP = 32'h00000013; // addi x0,x0,0
     logic [31:0] bp_update_target;
     logic [7:0] bp_recover_ghr;
 
-    correlated_bp #(.INDEX_BITS(8), .HISTORY_BITS(8)) branch_predictor (
+    correlated_bp #(.INDEX_BITS(8), .HISTORY_BITS(0)) branch_predictor (
         .clock(clock),
         .reset(reset),
         .PC(PC),
@@ -84,7 +84,7 @@ localparam NOP = 32'h00000013; // addi x0,x0,0
         .recover_ghr(bp_recover_ghr)
     );
 
-    ROM #(.MEMFILE("Microbenchmarks/micro2.mem"))
+    ROM #(.MEMFILE("fibonacci.mem"))
     InstMem(.clk(clock), 
             .addrA(PC[17:2]), 
             .dataOutA(A_instruction),

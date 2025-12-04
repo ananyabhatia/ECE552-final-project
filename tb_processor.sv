@@ -34,7 +34,7 @@ module tb_processor;
 
     // simulation length
     initial begin
-        #1000;         // run ~200 cycles for #5000, so this is currently 100 cycles
+        #5000;         // run ~200 cycles for #5000, so this is currently 100 cycles
         $finish;
     end
 
@@ -48,9 +48,20 @@ module tb_processor;
     always_ff @(posedge clock) begin
         if (!reset) begin
             $display("Counter=%0d", counter_out);
-            $display("\nCycle %0t | PC=%d", $time/10, uut.PC);
+            $display("\nCycle %0t | PC=%h", $time/10, uut.PC);
             // $display("data write reg=%h", uut.data_writeReg);
-            // $display("instruction=%h", uut.instruction);
+            // $display("A_instruction=%h", uut.A_instruction);
+            // $display("B_instruction=%h", uut.B_instruction);
+            // $display("A_FD_inst=%h", uut.A_FD_inst);
+            // $display("B_FD_inst=%h", uut.B_FD_inst);
+            // $display("A_DX_inst=%h", uut.A_DX_inst);
+            // $display("B_DX_inst=%h", uut.B_DX_inst);
+            // $display("instruction=%h", uut.A_MW_inst);
+            // $display("instruction=%h", uut.B_MW_inst);
+            // $display("MW pc=%h", uut.A_MW_PC);
+            // $display("MW pc=%h", uut.B_MW_PC);
+            // $display("EX_target=%h", uut.EX_target);
+            // $display("mispredict=%b", uut.EX_mispredict);
             // $display("MW_inst=%h", uut.MW_inst);
             // $display("load_use_hazard=%b", uut.load_use_hazard);
             // $display("intra_packet_hazard=%b", uut.intra_packet_hazard);
@@ -131,8 +142,8 @@ module tb_processor;
             // $display("A source 2=%h", uut.A_rs2);
             // $display("B source 1=%h", uut.B_rs1);
             // $display("B source 2=%h", uut.B_rs2);
-            $display("A MW Inst=%h", uut.A_MW_inst);
-            $display("B MW Inst=%h", uut.B_MW_inst);
+            // $display("A MW Inst=%h", uut.A_MW_inst);
+            // $display("B MW Inst=%h", uut.B_MW_inst);
             // $display("A MW RWE=%b", uut.A_MW_RWE);
             // $display("B MW RWE=%b", uut.B_MW_RWE);
             // $display("A MW data=%h", uut.A_data_writeReg);

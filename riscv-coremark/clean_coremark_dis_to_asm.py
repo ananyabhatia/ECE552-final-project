@@ -1,238 +1,333 @@
 #!/usr/bin/env python3
-import sys
-import re
-from collections import OrderedDict
+"""
+clean_riscv_disassembly.py
 
-# ==========================================================
-# CONFIGURATION
-# ==========================================================
-HALT_HEX = "0000000B"
-PADDING_NOPS = 4
+Improved version: removes self-jumps like:
+    L_80003b08:  /* tohost_exit+0x18 */
+        jal x0, L_80003b08 <tohost_exit+0x18>   # pseudo j
+
+Usage:
+    python3 clean_riscv_disassembly.py -i raw_disasm.txt -o cleaned.s
+"""
+import re
+import argparse
+from pathlib import Path
+
+# ---------- CONFIG ----------
+ILLEGAL = {
+    "csrr", "csrw", "csrs",
+    "csrrw", "csrrs", "csrrc",
+    "ecall", "ebreak", "mret", "sret"
+}
 NOP = "addi x0, x0, 0"
 
-ILLEGAL = {
-    "csrr","csrw","csrs","csrrw","csrrs","csrrc",
-    "ecall","ebreak","mret","sret"
-}
+# Patterns
+# Matches lines that start with an address like "80003b0c:" or "0x80003b0c:" or "L_80003b0c:"
+ADDR_LINE_RE = re.compile(r'^\s*(?:L_)?(0x)?([0-9a-fA-F]{6,8})\b(?::|\s)')
+# Matches 8-hex instruction-bytes tokens
+INSTR_BYTES_RE = re.compile(r'^[0-9a-fA-F]{8}$')
+# Matches angle bracket annotations like "<handle_trap+0x18>"
+ANGLE_RE = re.compile(r'<[^>]*>')
+# Generic address token (6-8 hex digits)
+ADDR_TOKEN_RE = re.compile(r'\b([0-9a-fA-F]{6,8})\b')
 
-RV32I = {
-    "lui","auipc",
-    "jal","jalr",
-    "beq","bne","blt","bge","bltu","bgeu",
-    "lb","lbu","lh","lhu","lw",
-    "sb","sh","sw",
-    "addi","slti","sltiu","xori","ori","andi",
-    "slli","srli","srai",
-    "add","sub","sll","slt","sltu","xor","srl","sra","or","and"
-}
+# ---------- UTILITIES ----------
 
-# ==========================================================
-# PSEUDOINSTRUCTIONS
-# ==========================================================
+def label_for(addr):
+    """Return label name for a hex address string (lowercase, no 0x)."""
+    a = addr.lower().lstrip("0x")
+    return f"L_{a}"
+
+def clean_angle(text):
+    """Remove angle bracket comment fragments."""
+    return ANGLE_RE.sub("", text).strip()
+
+def is_zero_token(tok):
+    """Return True for tokens that represent zero target."""
+    if tok is None:
+        return False
+    t = tok.strip().lower()
+    return t in ("0", "0x0", "00000000")
+
+def collect_addresses(lines):
+    """Find all 6-8 hex tokens that look like addresses and return sorted list."""
+    addrs = set()
+    for ln in lines:
+        m = ADDR_LINE_RE.match(ln)
+        if m:
+            addrs.add(m.group(2).lower())
+        # also sniff tokens inside angle-prefixes or comments
+        for t in ADDR_TOKEN_RE.findall(ln):
+            if 6 <= len(t) <= 8:
+                addrs.add(t.lower())
+    return sorted(addrs)
+
+def replace_addr_tokens(line, addr2label):
+    """Replace standalone hex tokens with labels when they match an address."""
+    def repl(m):
+        t = m.group(1).lower()
+        return addr2label.get(t, m.group(0))
+    return ADDR_TOKEN_RE.sub(repl, line)
+
 def expand_pseudo(mn, ops):
-    mn = mn.lower().strip()
+    """Return list of expanded instructions for known pseudoinstructions."""
+    mn_l = mn.lower()
     ops = ops.strip()
-
-    if mn == "nop":
+    if mn_l == "nop":
         return [NOP]
-
-    if mn in ("mv","move"):
+    if mn_l in ("mv", "move"):
         rd, rs = map(str.strip, ops.split(","))
         return [f"addi {rd}, {rs}, 0"]
-
-    if mn == "not":
-        rd, rs = map(str.strip, ops.split(","))
-        return [f"xori {rd}, {rs}, -1"]
-
-    if mn == "neg":
-        rd, rs = map(str.strip, ops.split(","))
-        return [f"sub {rd}, x0, {rs}"]
-
-    if mn == "j":
-        return [f"jal x0, {ops}"]
-
-    if mn == "jr":
-        return [f"jalr x0, 0({ops})"]
-
-    if mn == "ret":
-        return ["jalr x0, 0(ra)"]
-
-    if mn == "li":
-        rd, imm = map(str.strip, ops.split(","))
+    if mn_l == "li":
+        rd, imm = map(str.strip, ops.split(",",1))
         try:
-            val = int(imm, 0)
+            val = int(imm,0)
         except:
             return [NOP]
         if -2048 <= val <= 2047:
             return [f"addi {rd}, x0, {val}"]
-        hi = (val + (1 << 11)) >> 12
+        hi = (val + (1<<11)) >> 12
         lo = val - (hi << 12)
         return [f"lui {rd}, {hi}", f"addi {rd}, {rd}, {lo}"]
-
-    if mn == "beqz":
-        rs, lbl = map(str.strip, ops.split(","))
-        return [f"beq {rs}, x0, {lbl}"]
-
-    if mn == "bnez":
-        rs, lbl = map(str.strip, ops.split(","))
-        return [f"bne {rs}, x0, {lbl}"]
-
+    if mn_l == "j":
+        # pseudo 'j target' -> jal x0, target
+        return [f"jal x0, {ops}"]
+    if mn_l == "jr":
+        return [f"jalr x0, 0({ops})"]
+    if mn_l == "ret":
+        return ["jalr x0, 0(ra)"]
     return None
 
+# ---------- PROCESSOR ----------
 
-# ==========================================================
-# PARSING HELPERS
-# ==========================================================
-ADDR_RE = re.compile(r'^\s*([0-9a-fA-F]+):')
-TARGET_ADDR_RE = re.compile(r'\b([0-9a-fA-F]{6,16})\b')
-ANGLE_RE = re.compile(r'<([^>]+)>')
-
-
-def sanitize_label(sym):
-    sym = sym.replace("+", "_plus_").replace("-", "_neg_")
-    sym = re.sub(r'[^A-Za-z0-9_]', '_', sym)
-    if sym[0].isdigit():
-        sym = "L_" + sym
-    return sym
-
-
-# ==========================================================
-# FIRST PASS: gather labels
-# ==========================================================
-def first_pass(lines):
-    entries = []
-    addr_to_label = OrderedDict()
-
-    for line in lines:
-        line = line.rstrip("\n")
-        m = ADDR_RE.match(line)
-        addr = m.group(1).lower() if m else None
-
-        if addr:
-            angle = ANGLE_RE.search(line)
-            if angle and line.strip().endswith(":"):
-                addr_to_label[addr] = sanitize_label(angle.group(1))
-
-        entries.append({"line": line, "addr": addr})
-
-    # detect branch/jump targets
-    for e in entries:
-        line = e["line"]
-        for m in TARGET_ADDR_RE.finditer(line):
-            a = m.group(1).lower()
-            if len(a) >= 6:
-                if a not in addr_to_label:
-                    addr_to_label[a] = "L_" + a
-
-    return entries, addr_to_label
-
-
-# ==========================================================
-# SECOND PASS: generate output asm
-# ==========================================================
-def produce_asm(entries, addr_to_label):
+def process(lines, addr2label):
     out = []
+    last_emitted_label = None   # tracks the last label string (e.g., "L_80003b08")
+    label2addr = {v:k for k,v in addr2label.items()}
+
     in_init = False
 
-    for e in entries:
-        line = e["line"]
-        addr = e["addr"]
+    for ln in lines:
+        ln_stripped = ln.rstrip("\n")
+        # If this line defines an address label (starts with hex addr or L_...)
+        m_addr = ADDR_LINE_RE.match(ln_stripped)
+        addr = m_addr.group(2).lower() if m_addr else None
 
-        # Emit labels
-        if addr in addr_to_label:
-            out.append(f"{addr_to_label[addr]}:")
+        # Emit label if this address is known
+        if addr and addr in addr2label:
+            lbl = addr2label[addr]
+            # preserve any angle-comment on the same line as label if present
+            angle = ANGLE_RE.search(ln_stripped)
+            comment = f"    /* {angle.group(0).strip('<>')} */" if angle else ""
+            out.append(f"{lbl}:{comment}\n")
+            last_emitted_label = lbl
+            # don't treat presence of label as content to process further on same line;
+            # continue to next line — some disassemblies put an instruction on same line,
+            # but we'll still process the remainder below if the line contains code after colon.
 
-        # Find _init start
-        if "<_init>" in line:
+        # detect start of _init (keep only code after init)
+        if "<_init>" in ln_stripped:
             in_init = True
             continue
-
         if not in_init:
+            # skip everything before init
             continue
 
-        # Parse instruction line
-        m = ADDR_RE.match(line)
-        if not m:
+        # Extract content after possible "addr:" portion
+        remainder = ln_stripped
+        if ":" in ln_stripped:
+            # split only first colon to allow comments later
+            remainder = ln_stripped.split(":",1)[1].strip()
+        if not remainder:
             continue
 
-        after_colon = line.split(":", 1)[1].strip()
-        parts = after_colon.split(None, 2)
-        if len(parts) < 2:
+        # Drop 8-hex instruction-bytes tokens at start of remainder
+        parts = remainder.split(None,1)
+        if parts and INSTR_BYTES_RE.fullmatch(parts[0]):
+            remainder = parts[1].strip() if len(parts)>1 else ""
+            if not remainder:
+                continue
+
+        # Clean angle-bracket annotations inside the remainder (we'll keep trailing comments after '#')
+        # but we need to preserve comments after '#'
+        if "#" in remainder:
+            code_part, comment_part = remainder.split("#",1)
+            code_part = clean_angle(code_part)
+            remainder = code_part.strip() + ("  #"+comment_part if comment_part else "")
+        else:
+            remainder = clean_angle(remainder)
+
+        # Replace address-like tokens with labels
+        remainder = replace_addr_tokens(remainder, addr2label)
+
+        if not remainder:
             continue
 
-        hexcode = parts[0]
-        mnemonic = parts[1]
-        operands = parts[2] if len(parts) >= 3 else ""
-        mn_l = mnemonic.lower()
+        # split mnemonic + operands
+        sp = remainder.split(None,1)
+        mn = sp[0]
+        ops = sp[1] if len(sp)>1 else ""
+        mn_l = mn.lower()
 
-        # Illegal → nop
-        if mn_l in ILLEGAL:
-            out.append(f"    {NOP}   # removed illegal {mnemonic}")
-            continue
-
-        # Fix zext.b
+        # handle zext.b
         if mn_l == "zext.b":
-            # Expect: zext.b rd, rs
             try:
-                rd, rs = map(str.strip, operands.split(","))
-                out.append(f"    andi {rd}, {rs}, 255   # expanded from zext.b")
+                rd, rs = map(str.strip, ops.split(","))
+                out.append(f"    andi {rd}, {rs}, 255   # zext.b\n")
             except:
-                out.append(f"    {NOP}   # malformed zext.b")
+                out.append(f"    {NOP}\n")
             continue
 
-        # Replace numeric addresses with labels
-        def repl_target(m):
-            target = m.group(1).lower()
-            if target in addr_to_label:
-                return addr_to_label[target]
-            return m.group(0)
-
-        operands = TARGET_ADDR_RE.sub(repl_target, operands)
-
-        # RV32I → keep
-        if mn_l in RV32I:
-            out.append(f"    {mn_l} {operands}".rstrip())
+        # Drop illegal CSR/trap instrs
+        if any(mn_l.startswith(il) for il in ILLEGAL):
+            out.append(f"    {NOP}   # removed {mn}\n")
             continue
 
-        # Pseudo → expand
-        expanded = expand_pseudo(mn_l, operands)
-        if expanded:
-            for ex in expanded:
-                out.append(f"    {ex}   # expanded from {mnemonic}")
+        # Expand known pseudos first
+        pse = expand_pseudo(mn_l, ops)
+        if pse:
+            for e in pse:
+                # After expansion check for self-jump patterns in expanded text too
+                if is_self_jal_line(e, addr, last_emitted_label, label2addr):
+                    out.append(f"    {NOP}   # removed self-jump pseudo\n")
+                    continue
+                out.append(f"    {e}   # pseudo {mn}\n")
             continue
 
-        # UNKNOWN → KEEP EXACTLY AS-IS
-        full = mnemonic
-        if operands:
-            full += " " + operands
-        out.append(f"    {full}   # unknown, kept as-is")
+        # REAL INSTRUCTIONS: detect jal x0, target and remove self-jumps or zero-targets
+        if is_jal_self_or_zero(mn_l, ops, addr, last_emitted_label, label2addr):
+            out.append(f"    {NOP}   # removed self/zero-jump\n")
+            continue
 
-    # append HALT & padding
-    out.append("")
-    out.append(f"    .word 0x{HALT_HEX}    # HALT")
-    for _ in range(PADDING_NOPS):
-        out.append(f"    {NOP}")
+        # Otherwise emit as-is (preserve operand spacing)
+        if ops:
+            out.append(f"    {mn} {ops}\n")
+        else:
+            out.append(f"    {mn}\n")
 
-    return "\n".join(out)
+    return out
 
+# ---------- Helpers for detecting self-jal ----------
 
-# ==========================================================
-# ENTRY POINT
-# ==========================================================
+def normalize_target_token(raw_target):
+    """
+    Given raw target text like:
+      "L_80003b08 <tohost_exit+0x18>"
+      "L_80003b24"
+      "0"
+      "0x0"
+    Return the canonical first token (strip angle comments and trailing punctuation).
+    """
+    if not raw_target:
+        return ""
+    t = raw_target.strip()
+    # remove trailing comments starting with '#'
+    t = t.split("#",1)[0].strip()
+    # remove angle annotations
+    t = ANGLE_RE.sub("", t).strip()
+    # if there is a comma leftover (rare), take first
+    t = t.split(",")[0].strip()
+    # sometimes target appears as "L_80003b08 <...>" -> after angle removal it's "L_80003b08"
+    # lowercase normalized for our label naming
+    return t
+
+def is_jal_self_or_zero(mn_l, ops, current_addr, last_label, label2addr):
+    """
+    Return True if this is 'jal x0, 0' or 'jal x0, <last_label>' (self-loop),
+    or 'jal x0, <label>' where label resolves to same numeric addr as current_addr.
+    """
+    if mn_l != "jal":
+        return False
+    if not ops:
+        # 'jal label' without rd (i.e., jal with implicit rd=ra) -> not our target
+        return False
+
+    # parse rd and target
+    parts = ops.split(",",1)
+    if len(parts) == 2:
+        rd = parts[0].strip()
+        raw_target = parts[1].strip()
+    else:
+        # If form is 'jal label' (no rd), then not a jal x0 form
+        return False
+
+    # canonicalize
+    rd = rd.lower()
+    target = normalize_target_token(raw_target)
+
+    # zero target
+    if rd == "x0" and is_zero_token(target):
+        return True
+
+    # target equals last emitted label (common case where label printed above)
+    if rd == "x0" and last_label and target == last_label:
+        return True
+
+    # target is a label name present in label2addr and equal to current addr
+    if rd == "x0":
+        if target in label2addr:
+            try:
+                targ_addr = int(label2addr[target], 16)
+                if current_addr is not None:
+                    try:
+                        cur_addr_int = int(current_addr, 16)
+                        if targ_addr == cur_addr_int:
+                            return True
+                    except:
+                        pass
+            except:
+                pass
+
+    return False
+
+def is_self_jal_line(expanded_instr, current_addr, last_label, label2addr):
+    """
+    Check expanded pseudo-instruction text like "jal x0, L_80003b24" for self-jump.
+    """
+    # Basic parse
+    txt = expanded_instr.strip()
+    if not txt.lower().startswith("jal"):
+        return False
+    rest = txt.split(None,1)[1] if len(txt.split(None,1))>1 else ""
+    # rest typically: "x0, L_80003b24"
+    parts = rest.split(",",1)
+    if len(parts) < 2:
+        return False
+    rd = parts[0].strip().lower()
+    target = normalize_target_token(parts[1].strip())
+    if rd != "x0":
+        return False
+    if is_zero_token(target):
+        return True
+    if last_label and target == last_label:
+        return True
+    if target in label2addr and current_addr is not None:
+        try:
+            if int(label2addr[target],16) == int(current_addr,16):
+                return True
+        except:
+            pass
+    return False
+
+# ---------- MAIN ----------
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-i","--input", required=True, help="raw disassembly input file")
+    ap.add_argument("-o","--output", required=True, help="cleaned assembly output file")
+    args = ap.parse_args()
+
+    lines = Path(args.input).read_text().splitlines(keepends=False)
+
+    # pass 1: collect addresses and create label mapping
+    addrs = collect_addresses(lines)
+    addr2label = {a: label_for(a) for a in addrs}
+
+    # pass 2: process and emit cleaned lines
+    out_lines = process(lines, addr2label)
+
+    Path(args.output).write_text("".join(out_lines))
+    print(f"[OK] wrote {args.output} — {len(addr2label)} labels discovered.")
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python3 clean_dis_with_zextb.py input.dis output.s")
-        sys.exit(1)
-
-    infile, outfile = sys.argv[1], sys.argv[2]
-    with open(infile) as f:
-        lines = f.readlines()
-
-    entries, addr_to_label = first_pass(lines)
-    asm = produce_asm(entries, addr_to_label)
-
-    with open(outfile, "w") as f:
-        f.write(asm)
-
-    print(f"[OK] wrote assembly to {outfile}")
-    print(f"[INFO] created {len(addr_to_label)} labels")
+    main()

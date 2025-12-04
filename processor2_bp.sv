@@ -79,7 +79,7 @@ module processor2_bp(clock, reset, counter_out);
         .update_target(bp_update_target)
     );
 
-    ROM #(.MEMFILE("Microbenchmarks/micro2.mem"))
+    ROM #(.MEMFILE("fibonacci.mem"))
     InstMem(.clk(clock), 
         .addrA(PC[17:2]), 
         .dataOutA(A_instruction),

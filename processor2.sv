@@ -60,7 +60,7 @@ module processor2(clock, reset, counter_out);
             PC <= 32'b0;
         else if (EX_mispredict)
             PC <= EX_target;
-        else if ((load_use_hazard !== 1'b1) && (intra_packet_hazard !== 1'b1))
+        else if ((load_use_hazard != 1'b1) && (intra_packet_hazard != 1'b1))
             PC <= nextPC;
     end
     // bp branch_predictor(
